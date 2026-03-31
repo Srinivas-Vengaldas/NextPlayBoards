@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nextplay/api/internal/authctx"
 )
 
@@ -150,6 +151,12 @@ func (h *Handlers) ListBoards(w http.ResponseWriter, r *http.Request) {
 			ORDER BY b.updated_at DESC
 		`, u.ID)
 		if err != nil {
+			var pgErr *pgconn.PgError
+			// If board_members (or a referenced column) doesn't exist yet, degrade gracefully.
+			if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703") {
+				out = []BoardSummary{}
+				return nil
+			}
 			return err
 		}
 		defer rows.Close()
