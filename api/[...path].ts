@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Prisma } from "@prisma/client";
 import { prisma } from "./_lib/prisma";
 import { getUserIdFromRequest } from "./_lib/auth";
 import { isUuidLike, readBody, sendError, sendJson } from "./_lib/http";
@@ -66,14 +65,13 @@ async function createActivity(
   message: string,
   metadata: Record<string, unknown> = {},
 ) {
-  const meta = metadata as Prisma.InputJsonValue;
   try {
     await prisma.taskActivityNew.create({
-      data: { taskId, actorId, actionType, message, metadata: meta },
+      data: { taskId, actorId, actionType, message, metadata: metadata as any },
     });
   } catch {
     await prisma.taskActivityOld.create({
-      data: { taskId, actorId, actionType, metadata: meta },
+      data: { taskId, actorId, actionType, metadata: metadata as any },
     });
   }
 }
