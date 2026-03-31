@@ -1,7 +1,14 @@
 import type { VercelResponse } from "@vercel/node";
 
 export function sendJson(res: VercelResponse, status: number, payload: unknown) {
-  res.status(status).setHeader("Content-Type", "application/json").send(JSON.stringify(payload));
+  // Prevent browsers/CDNs from returning 304 without a body.
+  // Your frontend throws on any non-2xx, so a 304 breaks data loading.
+  res
+    .status(status)
+    .setHeader("Content-Type", "application/json")
+    .setHeader("Cache-Control", "no-store, max-age=0, must-revalidate")
+    .setHeader("Pragma", "no-cache")
+    .send(JSON.stringify(payload));
 }
 
 export function sendError(res: VercelResponse, status: number, message: string) {
