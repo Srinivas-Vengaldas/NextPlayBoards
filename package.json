@@ -6,10 +6,18 @@
     "dev:mobile": "pnpm --filter @nextplay/mobile start",
     "build:web": "pnpm --filter @nextplay/web build",
     "build:shared": "pnpm --filter @nextplay/shared build",
-    "lint:web": "pnpm --filter @nextplay/web lint"
+    "lint:web": "pnpm --filter @nextplay/web lint",
+    "prisma:generate": "prisma generate",
+    "prisma:pull": "prisma db pull"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
   },
-  "packageManager": "pnpm@9.15.0+sha512.76e2379760a4328ec4415815bcd6628dee727af3779aaa4c914e3944156c4299921a89f976381ee107d1f12f1a4c3ee0e11decc4267b25aa9d18340d5165eb"
+  "packageManager": "pnpm@9.15.0+sha512.76e2379760a4328ec4415815bcd6628dee727af3779aaa4c914e3944156c4299921a89f976381ee107d1f12f1a4c3ee0e11decc4267b25aa9d18340d5165eb",
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@vercel/node": "^5.6.22",
+    "jose": "^6.2.2",
+    "prisma": "^5.22.0"
+  }
 }

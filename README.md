@@ -4,7 +4,7 @@ Asana/Linear/Notion-inspired Kanban board with:
 
 - **Web**: Vite + React + TypeScript
 - **Mobile**: Expo React Native + TypeScript
-- **Backend API**: Go (REST)
+- **Backend API**: Vercel Functions (TypeScript + Prisma)
 - **Database/Auth**: Supabase (Postgres + Auth + RLS)
 - **Hosting**: Vercel (web)
 
@@ -32,30 +32,16 @@ Set:
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_API_URL` (e.g. `http://localhost:8080`)
 
-#### API (Go)
+#### API runtime (Prisma)
 
-Copy:
+The web app calls `/api/*` endpoints served by Vercel Functions.
 
-`apps/api/.env.example` → `apps/api/.env`
+Set these environment variables in Vercel:
 
-Set:
-
-- `DATABASE_URL` (Supabase Postgres connection string)
+- `DATABASE_URL` (Supabase Postgres connection string, preferably pooled)
 - `SUPABASE_JWT_SECRET` (JWT secret used by Supabase)
 
-### 2) Run the backend API
-
-From repo root:
-
-```bash
-cd apps/api
-# If you have Go installed locally
-go run ./cmd/server
-```
-
-The server listens on `HTTP_ADDR` (default `:8080`).
-
-### 3) Run the web app
+### 2) Run the web app
 
 From repo root:
 
@@ -64,7 +50,7 @@ pnpm install
 pnpm --filter @nextplay/web dev
 ```
 
-### 4) Run the mobile app
+### 3) Run the mobile app
 
 From repo root:
 
@@ -106,17 +92,14 @@ From repo root:
    - `VITE_API_URL`
 4. Vercel build uses the repository root `vercel.json` (added in this commit).
 
-### Backend API host (Go)
+### API on Vercel Functions
 
-This repo includes a container build at `apps/api/Dockerfile`.
+Backend endpoints are implemented in `api/[...path].ts` and run in Vercel's Node runtime.
 
-Pick a host that supports containers (for example: Fly.io / Render / Google Cloud Run).
-
-Required environment variables for the API:
+Required Vercel env vars:
 
 - `DATABASE_URL`
 - `SUPABASE_JWT_SECRET`
-- `HTTP_ADDR` (optional)
 
 ---
 

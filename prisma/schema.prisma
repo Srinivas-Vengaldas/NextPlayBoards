@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id          String   @id @db.Uuid
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  boardsOwned   Board[]          @relation("BoardOwner")
+  boardMembers  BoardMember[]
+  taskAssignees TaskAssignee[]
+  commentsById  TaskComment[]    @relation("CommentUser")
+  commentsByOld TaskComment[]    @relation("CommentAuthor")
+  activitiesNew TaskActivityNew[]
+  activitiesOld TaskActivityOld[]
+
+  @@map("profiles")
+}
+
+model Board {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title     String
+  ownerId   String   @map("owner_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  owner       Profile      @relation("BoardOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     BoardMember[]
+  columns     Column[]
+  labels      Label[]
+  teamMembers TeamMember[]
+
+  @@map("boards")
+}
+
+model BoardMember {
+  boardId   String   @map("board_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   @default("member")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  board Board   @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([boardId, userId])
+  @@map("board_members")
+}
+
+model Column {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  title     String
+  position  Float
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  board Board   @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@map("columns")
+}
+
+model Task {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  columnId    String    @map("column_id") @db.Uuid
+  title       String
+  description String    @default("")
+  position    Float
+  assigneeId  String?   @map("assignee_id") @db.Uuid
+  dueAt       DateTime? @map("due_at") @db.Timestamptz(6)
+  priority    String    @default("none")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  column        Column             @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  labels        TaskLabel[]
+  assignees     TaskAssignee[]
+  comments      TaskComment[]
+  activitiesNew TaskActivityNew[]
+  activitiesOld TaskActivityOld[]
+  teamAssignees TaskTeamAssignee[]
+
+  @@map("tasks")
+}
+
+model Label {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  name      String
+  color     String   @default("#64748b")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  board Board      @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks TaskLabel[]
+
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId    String   @map("task_id") @db.Uuid
+  labelId   String   @map("label_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_labels")
+}
+
+model TaskAssignee {
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignees")
+}
+
+model TaskComment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  authorId  String?  @map("author_id") @db.Uuid
+  content   String?  @map("content")
+  body      String?  @map("body")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task   Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user   Profile? @relation("CommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  author Profile? @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("task_comments")
+}
+
+model TaskActivityNew {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId     String   @map("task_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  actionType String   @map("action_type")
+  message    String
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task  Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor Profile @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("task_activities")
+}
+
+model TaskActivityOld {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId     String   @map("task_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  actionType String   @map("action_type")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task  Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor Profile @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("task_activity")
+}
+
+model TeamMember {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  name      String
+  color     String   @default("#3b82f6")
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  board Board             @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks TaskTeamAssignee[]
+
+  @@map("team_members")
+}
+
+model TaskTeamAssignee {
+  taskId       String   @map("task_id") @db.Uuid
+  teamMemberId String   @map("team_member_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, teamMemberId])
+  @@map("task_team_assignees")
+}
