@@ -1,0 +1,7 @@
+{
+  "framework": "vite",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm --filter @nextplay/web build",
+  "outputDirectory": "apps/web/dist"
+}
+

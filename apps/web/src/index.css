@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --border: 240 5.9% 90%;
+    --accent: 239 84% 57%;
+    --accent-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 240 10% 2%; 
+    --foreground: 0 0% 98%;
+    --card: 240 10% 4%;
+    --card-foreground: 0 0% 98%;
+    --border: 240 5% 12%; 
+    --accent: 239 84% 67%;
+    --accent-foreground: 0 0% 100%;
+  }
+}
+@layer base {
+  body {
+    /* Standard CSS properties don't require Tailwind validation */
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
