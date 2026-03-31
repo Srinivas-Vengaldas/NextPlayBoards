@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 apps/web/dist/
 apps/web/node_modules/
