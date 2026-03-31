@@ -1,18 +1,23 @@
-import pkg from "@prisma/client";
+import * as PrismaPkg from "@prisma/client";
 
-const { PrismaClient } = pkg;
+const PrismaClient =
+  (PrismaPkg as any).PrismaClient ?? (PrismaPkg as any).default?.PrismaClient;
+
+if (!PrismaClient) {
+  throw new Error("PrismaClient export not found in @prisma/client");
+}
 
 declare global {
   // eslint-disable-next-line no-var
-  var __nextplayPrisma: InstanceType<typeof PrismaClient> | undefined;
+  var __nextplayPrisma: any | undefined;
 }
 
 export const prisma =
-  global.__nextplayPrisma ??
+  globalThis.__nextplayPrisma ??
   new PrismaClient({
     log: ["error"],
   });
 
 if (process.env.NODE_ENV !== "production") {
-  global.__nextplayPrisma = prisma;
+  globalThis.__nextplayPrisma = prisma;
 }
