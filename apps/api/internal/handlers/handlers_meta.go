@@ -588,7 +588,7 @@ func (h *Handlers) ListTeamMembers(w http.ResponseWriter, r *http.Request) {
 		`, boardID)
 		if err != nil {
 			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "42P01" { // undefined_table
+			if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703") { // undefined_table/column
 				out = []TeamMemberDTO{}
 				return nil
 			}
@@ -826,6 +826,12 @@ func (h *Handlers) ListBoardLabels(w http.ResponseWriter, r *http.Request) {
 			FROM labels WHERE board_id = $1::uuid ORDER BY name ASC
 		`, boardID)
 		if err != nil {
+			var pgErr *pgconn.PgError
+			// Labels tables may not exist yet if migrations aren't applied.
+			if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703") {
+				out = []LabelDTO{}
+				return nil
+			}
 			return err
 		}
 		defer rows.Close()

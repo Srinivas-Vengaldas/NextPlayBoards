@@ -91,6 +91,11 @@ func enrichTasksWithLabelsAndAssignees(ctx context.Context, tx pgx.Tx, columns [
 		WHERE tl.task_id = ANY($1::uuid[])
 	`, taskIDs)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703") {
+			// Labels tables/columns not present (migration not applied yet).
+			return nil
+		}
 		return err
 	}
 	defer rows.Close()
@@ -111,6 +116,11 @@ func enrichTasksWithLabelsAndAssignees(ctx context.Context, tx pgx.Tx, columns [
 		ORDER BY task_id ASC, created_at ASC
 	`, taskIDs)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703") {
+			// Task assignees tables/columns not present (migration not applied yet).
+			return nil
+		}
 		return err
 	}
 	defer arows.Close()
@@ -165,8 +175,8 @@ func enrichTasksWithTeamAssignees(ctx context.Context, tx pgx.Tx, columns []Colu
 	`, taskIDs)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		// older schema: table may not exist yet
-		if errors.As(err, &pgErr) && pgErr.Code == "42P01" {
+		// migration may not be applied yet
+		if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703") {
 			return nil
 		}
 		return err
