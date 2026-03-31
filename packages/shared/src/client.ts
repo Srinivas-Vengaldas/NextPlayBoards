@@ -80,6 +80,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     async listBoards(): Promise<BoardSummary[]> {
       const res = await fetch(`${root}/boards`, {
         headers: await authHeader(getToken),
+        cache: "no-store",
       });
       const data = await readJson(res, (d) => d);
       if (!Array.isArray(data)) {
