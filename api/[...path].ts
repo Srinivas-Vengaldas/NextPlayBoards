@@ -40,13 +40,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(204).end();
   }
 
+  // Health check: keep this unauthenticated so it can be used to validate routing quickly.
+  // Some Vercel deployments may route `/api/ping` through the catch-all instead of `api/ping.ts`.
+  const prePathname = normalizeApiPath(resolveApiPathname(req));
+  const preMethod = req.method || "GET";
+  if (preMethod === "GET" && prePathname === "/ping") {
+    return sendJson(res, 200, { ok: true });
+  }
+
   const userId = await getUserIdFromRequest(req);
   if (!userId) {
     return sendError(res, 401, "unauthorized");
   }
 
-  const pathname = normalizeApiPath(resolveApiPathname(req));
-  const method = req.method || "GET";
+  const pathname = prePathname;
+  const method = preMethod;
 
   try {
     await runWithRls(userId, async (tx) => {
