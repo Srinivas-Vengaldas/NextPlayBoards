@@ -30,6 +30,14 @@ import {
 
 export type GetToken = () => Promise<string | null> | string | null;
 
+/** Static base or a function evaluated on each request (e.g. same-origin `/api` fixes in the browser). */
+export type ApiBaseUrl = string | (() => string);
+
+function resolveRoot(baseUrl: ApiBaseUrl): string {
+  const b = typeof baseUrl === "function" ? baseUrl() : baseUrl;
+  return b.replace(/\/$/, "");
+}
+
 export type CreateBoardBody = z.infer<typeof createBoardBodySchema>;
 export type CreateColumnBody = z.infer<typeof createColumnBodySchema>;
 export type PatchColumnBody = z.infer<typeof patchColumnBodySchema>;
@@ -73,12 +81,12 @@ async function readJson<T>(res: Response, parse: (data: unknown) => T): Promise<
   return parse(data);
 }
 
-export function createApiClient(baseUrl: string, getToken: GetToken) {
-  const root = baseUrl.replace(/\/$/, "");
+export function createApiClient(baseUrl: ApiBaseUrl, getToken: GetToken) {
+  const root = () => resolveRoot(baseUrl);
 
   return {
     async listBoards(): Promise<BoardSummary[]> {
-      const res = await fetch(`${root}/boards`, {
+      const res = await fetch(`${root()}/boards`, {
         headers: await authHeader(getToken),
         cache: "no-store",
       });
@@ -90,7 +98,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async createBoard(body: CreateBoardBody): Promise<{ id: string }> {
-      const res = await fetch(`${root}/boards`, {
+      const res = await fetch(`${root()}/boards`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -105,7 +113,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async getBoard(id: string): Promise<BoardDetail> {
-      const res = await fetch(`${root}/boards/${encodeURIComponent(id)}`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(id)}`, {
         headers: await authHeader(getToken),
       });
       const data = await readJson(res, (d) => d);
@@ -113,7 +121,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async createColumn(boardId: string, body: CreateColumnBody): Promise<{ id: string }> {
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/columns`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/columns`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -128,7 +136,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async patchColumn(columnId: string, body: PatchColumnBody): Promise<void> {
-      const res = await fetch(`${root}/columns/${encodeURIComponent(columnId)}`, {
+      const res = await fetch(`${root()}/columns/${encodeURIComponent(columnId)}`, {
         method: "PATCH",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -137,7 +145,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async createTask(columnId: string, body: CreateTaskBody): Promise<{ id: string }> {
-      const res = await fetch(`${root}/columns/${encodeURIComponent(columnId)}/tasks`, {
+      const res = await fetch(`${root()}/columns/${encodeURIComponent(columnId)}/tasks`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -152,7 +160,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async patchTask(taskId: string, body: PatchTaskBody): Promise<void> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}`, {
         method: "PATCH",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -161,7 +169,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async listBoardLabels(boardId: string): Promise<BoardLabel[]> {
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/labels`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/labels`, {
         headers: await authHeader(getToken),
       });
       const data = await readJson(res, (d) => d);
@@ -172,7 +180,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async listBoardMembers(boardId: string): Promise<BoardMember[]> {
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/members`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/members`, {
         headers: await authHeader(getToken),
       });
       if (res.status === 404) return [];
@@ -185,7 +193,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async searchBoardMembers(boardId: string, q: string): Promise<BoardMemberSearch[]> {
       const res = await fetch(
-        `${root}/boards/${encodeURIComponent(boardId)}/member-search?q=${encodeURIComponent(q)}`,
+        `${root()}/boards/${encodeURIComponent(boardId)}/member-search?q=${encodeURIComponent(q)}`,
         {
           headers: await authHeader(getToken),
         },
@@ -200,7 +208,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async addBoardMember(boardId: string, body: AddBoardMemberBody): Promise<void> {
       addBoardMemberBodySchema.parse(body);
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/members`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/members`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -209,7 +217,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async listTeamMembers(boardId: string): Promise<TeamMember[]> {
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/team-members`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/team-members`, {
         headers: await authHeader(getToken),
       });
       if (res.status === 404) return [];
@@ -220,7 +228,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async createTeamMember(boardId: string, body: CreateTeamMemberBody): Promise<{ id: string }> {
       createTeamMemberBodySchema.parse(body);
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/team-members`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/team-members`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -234,7 +242,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async addTaskTeamMember(taskId: string, body: AddTaskTeamMemberBody): Promise<void> {
       addTaskTeamMemberBodySchema.parse(body);
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/team-members`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/team-members`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -244,14 +252,14 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async removeTaskTeamMember(taskId: string, memberId: string): Promise<void> {
       const res = await fetch(
-        `${root}/tasks/${encodeURIComponent(taskId)}/team-members/${encodeURIComponent(memberId)}`,
+        `${root()}/tasks/${encodeURIComponent(taskId)}/team-members/${encodeURIComponent(memberId)}`,
         { method: "DELETE", headers: await authHeader(getToken) },
       );
       await readJson(res, () => undefined);
     },
 
     async createBoardLabel(boardId: string, body: CreateBoardLabelBody): Promise<{ id: string }> {
-      const res = await fetch(`${root}/boards/${encodeURIComponent(boardId)}/labels`, {
+      const res = await fetch(`${root()}/boards/${encodeURIComponent(boardId)}/labels`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -266,7 +274,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async listTaskComments(taskId: string): Promise<TaskComment[]> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/comments`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/comments`, {
         headers: await authHeader(getToken),
       });
       if (res.status === 404) return [];
@@ -278,7 +286,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async createTaskComment(taskId: string, body: CreateTaskCommentBody): Promise<void> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/comments`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/comments`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
@@ -287,7 +295,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async listTaskActivity(taskId: string): Promise<TaskActivity[]> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/activity`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/activity`, {
         headers: await authHeader(getToken),
       });
       if (res.status === 404) return [];
@@ -299,7 +307,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async addTaskLabel(taskId: string, labelId: string): Promise<void> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/labels`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/labels`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify({ labelId }),
@@ -309,7 +317,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async removeTaskLabel(taskId: string, labelId: string): Promise<void> {
       const res = await fetch(
-        `${root}/tasks/${encodeURIComponent(taskId)}/labels/${encodeURIComponent(labelId)}`,
+        `${root()}/tasks/${encodeURIComponent(taskId)}/labels/${encodeURIComponent(labelId)}`,
         {
           method: "DELETE",
           headers: await authHeader(getToken),
@@ -319,7 +327,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async listTaskAssignees(taskId: string): Promise<string[]> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/assignees`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/assignees`, {
         headers: await authHeader(getToken),
       });
       const data = await readJson(res, (d) => d);
@@ -330,7 +338,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
     },
 
     async addTaskAssignee(taskId: string, userId: string): Promise<void> {
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}/assignees`, {
+      const res = await fetch(`${root()}/tasks/${encodeURIComponent(taskId)}/assignees`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify({ userId }),
@@ -340,7 +348,7 @@ export function createApiClient(baseUrl: string, getToken: GetToken) {
 
     async removeTaskAssignee(taskId: string, userId: string): Promise<void> {
       const res = await fetch(
-        `${root}/tasks/${encodeURIComponent(taskId)}/assignees/${encodeURIComponent(userId)}`,
+        `${root()}/tasks/${encodeURIComponent(taskId)}/assignees/${encodeURIComponent(userId)}`,
         {
           method: "DELETE",
           headers: await authHeader(getToken),

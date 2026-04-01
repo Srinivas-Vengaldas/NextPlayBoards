@@ -3,10 +3,11 @@ import { supabase } from "./supabase";
 
 /**
  * Base URL for `createApiClient` paths like `/boards`, `/tasks`, … (final URLs are `${base}/boards/...`).
- * - Empty → same-origin `/api` (correct for Vercel: handlers live under `/api/*`).
- * - Absolute URL with **no path** (e.g. `https://project.vercel.app`) → append `/api`. A common mistake is
- *   setting only the site origin; that produced `https://…/boards/…` and **404** because static hosting has no `/boards` route.
- * - Already includes a path (e.g. `https://…/api` or `https://…/custom`) → use as-is (trailing slash stripped).
+ * - Empty → same-origin `/api` (Vercel serverless lives under `/api/*`).
+ * - Absolute URL with no path (only origin) → append `/api`. Mis-set `VITE_API_URL=https://app.vercel.app`
+ *   used to produce `https://app.vercel.app/boards/...` → **404** (no `/boards` on the static host).
+ * - In the **browser**, if env is exactly this page’s origin with no path, return relative `/api` so it
+ *   self-heals even when an old build inlined the wrong env (lazy resolver + `createApiClient(() => …)`).
  */
 export function getApiBaseUrl(): string {
   const raw = (import.meta.env.VITE_API_URL ?? "").trim();
@@ -21,8 +22,17 @@ export function getApiBaseUrl(): string {
   try {
     const u = new URL(noTrailingSlash);
     let path = u.pathname.replace(/\/+$/, "") || "";
+
+    const pageOrigin =
+      typeof globalThis !== "undefined" && "location" in globalThis
+        ? (globalThis as unknown as { location?: { origin?: string } }).location?.origin
+        : undefined;
+
     if (path === "" || path === "/") {
-      path = "/api";
+      if (pageOrigin && u.origin === pageOrigin) {
+        return "/api";
+      }
+      return `${u.origin}/api`;
     }
     return `${u.origin}${path}`;
   } catch {
@@ -69,4 +79,4 @@ async function getAccessTokenForApi(): Promise<string | null> {
   return session.access_token;
 }
 
-export const api = createApiClient(getApiBaseUrl(), getAccessTokenForApi);
+export const api = createApiClient(() => getApiBaseUrl(), getAccessTokenForApi);
