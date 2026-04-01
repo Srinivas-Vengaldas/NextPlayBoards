@@ -1,6 +1,9 @@
 {
   "name": "nextplay",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev:web": "pnpm --filter @nextplay/web dev",
     "dev:mobile": "pnpm --filter @nextplay/mobile start",
@@ -13,7 +16,7 @@
   "devDependencies": {
     "typescript": "^5.7.2"
   },
-  "packageManager": "pnpm@9.15.0+sha512.76e2379760a4328ec4415815bcd6628dee727af3779aaa4c914e3944156c4299921a89f976381ee107d1f12f1a4c3ee0e11decc4267b25aa9d18340d5165eb",
+  "packageManager": "pnpm@9.15.0",
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@vercel/node": "^5.6.22",

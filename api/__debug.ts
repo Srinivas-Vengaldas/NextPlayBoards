@@ -1,6 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { applyCors } from "./_lib/http";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applyCors(req, res);
+  if ((req.method || "GET") === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   const auth = req.headers.authorization ?? null;
   const hasBearer = typeof auth === "string" && auth.startsWith("Bearer ");
 

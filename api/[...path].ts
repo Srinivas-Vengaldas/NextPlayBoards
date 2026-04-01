@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { prisma } from "./_lib/prisma";
 import { getUserIdFromRequest } from "./_lib/auth";
-import { isUuidLike, readBody, sendError, sendJson } from "./_lib/http";
+import { applyCors, isUuidLike, readBody, sendError, sendJson } from "./_lib/http";
 
 type Priority = "none" | "low" | "medium" | "high" | "urgent";
 
@@ -77,6 +77,11 @@ async function createActivity(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applyCors(req, res);
+  if ((req.method || "GET") === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   const userId = await getUserIdFromRequest(req);
   if (!userId) {
     return sendError(res, 401, "unauthorized");

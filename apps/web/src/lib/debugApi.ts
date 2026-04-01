@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "./api";
+
 export type ApiDebugReport = {
   apiBaseUrl: string;
   debugEndpoint: string;
@@ -21,7 +23,7 @@ function bodyPreview(body: string): string {
  *   import("./lib/debugApi").then((m) => m.runApiDiagnostics().then(console.log))
  */
 export async function runApiDiagnostics(): Promise<ApiDebugReport> {
-  const apiBaseUrl = (import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "/api");
+  const apiBaseUrl = getApiBaseUrl();
   const debugEndpoint = `${apiBaseUrl}/__debug`;
   const boardsEndpoint = `${apiBaseUrl}/boards`;
 

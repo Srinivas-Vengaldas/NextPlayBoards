@@ -82,24 +82,14 @@ From repo root:
 
 ## Deploy
 
-### Web on Vercel
+**Full checklist:** see [`VERCEL.md`](VERCEL.md) (import, Node 20.x, env vars, SPA output, troubleshooting).
 
-1. Connect this GitHub repository in Vercel.
-2. Create a new project pointing at the repository root.
-3. Set environment variables:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_API_URL`
-4. Vercel build uses the repository root `vercel.json` (added in this commit).
+Summary:
 
-### API on Vercel Functions
-
-Backend endpoints are implemented in `api/[...path].ts` and run in Vercel's Node runtime.
-
-Required Vercel env vars:
-
-- `DATABASE_URL`
-- `SUPABASE_JWT_SECRET`
+- Connect the repo in [Vercel](https://vercel.com); **root directory** = repository root (monorepo).
+- Build/install/output are defined in [`vercel.json`](vercel.json) (`pnpm`, Prisma generate, shared + web build, `apps/web/dist`).
+- Set **Node.js 20.x** under Project → Settings → General.
+- Env vars: see [`.env.example`](.env.example) (Vite `VITE_*` plus `DATABASE_URL` and `SUPABASE_JWT_SECRET` for [`api/`](api/) serverless routes).
 
 ---
 

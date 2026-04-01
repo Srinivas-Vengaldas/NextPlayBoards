@@ -1,4 +1,38 @@
-import type { VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+
+function parseAllowedOrigins(): string[] | null {
+  const raw = process.env.CORS_ORIGINS?.trim();
+  if (!raw) return null;
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Cross-origin browser calls (web on one Vercel URL, API on another) require
+ * these headers on the response and on OPTIONS preflight.
+ * If CORS_ORIGINS is unset, the request Origin is echoed when present (else *).
+ * If set, only listed origins are allowed (comma-separated).
+ */
+export function applyCors(req: VercelRequest, res: VercelResponse): void {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+  const allowed = parseAllowedOrigins();
+  let allow: string | undefined;
+  if (allowed === null || allowed.length === 0) {
+    allow = origin ?? "*";
+  } else if (origin && allowed.includes(origin)) {
+    allow = origin;
+  } else if (allowed.includes("*")) {
+    allow = "*";
+  }
+  if (allow) {
+    res.setHeader("Access-Control-Allow-Origin", allow);
+    if (allow !== "*") {
+      res.setHeader("Vary", "Origin");
+    }
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept");
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
 
 export function sendJson(res: VercelResponse, status: number, payload: unknown) {
   // Prevent browsers/CDNs from returning 304 without a body.
