@@ -18,7 +18,7 @@
 
 - **Framework preset:** `"framework": null` (**Other**). The Vite preset can deploy the SPA from `outputDirectory` but **omit** repo-root [`api/`](api/) serverless routes on some deployments, which surfaces as platform **`404 NOT_FOUND`** (`text/plain`, `x-vercel-error: NOT_FOUND`) for every `/api/*` URL. Using **Other** keeps your explicit `buildCommand` / `outputDirectory` and still picks up `api/**/*.ts`.
 - **Install:** `pnpm install --frozen-lockfile`
-- **Build:** `pnpm prisma:generate && pnpm --filter @nextplay/shared build && pnpm --filter @nextplay/web build`
+- **Build:** `pnpm prisma:vercel-build && pnpm --filter @nextplay/shared build && pnpm --filter @nextplay/web build` (Vercel runs **`prisma generate` only** — not `migrate deploy`; see below.)
 - **Output:** `apps/web/dist`
 - **SPA routing:** [`vercel.json`](vercel.json) uses `rewrites` so only non-`/api` paths fall back to `index.html`. If `/api/*` were sent to the SPA, the app would show “Could not load boards” because the client would receive HTML instead of JSON.
 
@@ -56,6 +56,17 @@ Enable the same keys for **Preview** as for **Production** if you use preview UR
 | `VITE_API_URL` | Browser base URL for your API, e.g. `https://<your-project>.vercel.app/api` (avoid trailing-slash mismatches with your client code). |
 
 `prisma generate` during build does not require a live database; `DATABASE_URL` is still required at **runtime** for API routes that use Prisma.
+
+### Prisma Migrate on Vercel (P3005)
+
+If **`prisma migrate deploy`** runs during CI/Vercel on a **non-empty** Supabase database that was never tracked by Prisma Migrate, the build fails with **P3005** (*database schema is not empty*). The Vercel build therefore uses **`pnpm prisma:vercel-build`** = `prisma generate` only.
+
+**Apply schema changes yourself** (one-off from your machine with `DATABASE_URL` / `DIRECT_URL`):
+
+- Quick align: `pnpm prisma:db-push`
+- Or: `pnpm prisma:migrate:deploy` after you [baseline](https://www.prisma.io/docs/guides/migrate/production-troubleshooting#baseline-an-existing-database-production-db-already-has-a-schema) the DB (e.g. mark existing migrations as applied with `prisma migrate resolve` when tables already match).
+
+After the DB is baselined and you want migrations on every deploy, you can switch `vercel.json` **buildCommand** to use `pnpm prisma:vercel-build:with-migrate` instead (and ensure build env has DB credentials).
 
 ## 5. Deploy
 
