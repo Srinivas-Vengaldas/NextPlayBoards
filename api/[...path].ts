@@ -11,13 +11,17 @@ function invalidPathId(res: VercelResponse, kind: string) {
 }
 
 /** Decode path segment (handles % encoding) so tmp-* and UUID checks match the real id. */
-function parseTaskPathSegment(raw: string): string {
+function decodePathSegment(raw: string): string {
   const t = raw.trim();
   try {
     return decodeURIComponent(t);
   } catch {
     return t;
   }
+}
+
+function parseTaskPathSegment(raw: string): string {
+  return decodePathSegment(raw);
 }
 
 /** Returns true after sending 400 — caller must return immediately (do not query Prisma). */
@@ -100,6 +104,7 @@ function taskDto(task: any) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log("INCOMING_PATH", req.url ?? null, req.method ?? null);
   applyCors(req, res);
   const method = req.method || "GET";
   if (method === "OPTIONS") {
@@ -111,8 +116,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (method === "GET" && dbg.final === "/ping") {
     return sendJson(res, 200, { ok: true });
   }
-
-  console.log("DEBUG_PATH", { fromUrl: dbg.fromUrl, fromQuery: dbg.fromQuery, final: dbg.final, method });
 
   if (method === "GET" && dbg.final === "/__debug") {
     const auth = req.headers.authorization ?? null;
@@ -140,7 +143,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       env: {
         hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
-        hasDirectUrl: Boolean(process.env.DIRECT_URL),
         hasSupabaseJwtSecret: Boolean(process.env.SUPABASE_JWT_SECRET?.trim()),
         nodeEnv: process.env.NODE_ENV ?? null,
         vercelEnv: process.env.VERCEL_ENV ?? null,
@@ -245,7 +247,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const boardMatch = pathname.match(/^\/boards\/([^/]+)$/i);
     if (method === "GET" && boardMatch) {
-      const boardId = boardMatch[1];
+      const boardId = decodePathSegment(boardMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) {
         console.warn("board_access_denied_or_missing", { boardId, userId, pathname, method });
@@ -332,7 +334,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const boardMembersMatch = pathname.match(/^\/boards\/([^/]+)\/members$/i);
     if (method === "GET" && boardMembersMatch) {
-      const boardId = boardMembersMatch[1];
+      const boardId = decodePathSegment(boardMembersMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) {
         console.warn("board_members_access_denied_or_missing", { boardId, userId, pathname, method });
@@ -354,7 +356,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (method === "POST" && boardMembersMatch) {
-      const boardId = boardMembersMatch[1];
+      const boardId = decodePathSegment(boardMembersMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAdminBoard(userId, boardId))) return sendError(res, 403, "forbidden");
       const body = await readBody<{ userId?: string }>(req.body);
@@ -369,7 +371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const boardSearchMatch = pathname.match(/^\/boards\/([^/]+)\/member-search$/i);
     if (method === "GET" && boardSearchMatch) {
-      const boardId = boardSearchMatch[1];
+      const boardId = decodePathSegment(boardSearchMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const q = String(req.query.q || "").trim();
@@ -392,7 +394,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const boardTeamMatch = pathname.match(/^\/boards\/([^/]+)\/team-members$/i);
     if (method === "GET" && boardTeamMatch) {
-      const boardId = boardTeamMatch[1];
+      const boardId = decodePathSegment(boardTeamMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) {
         console.warn("board_team_members_access_denied_or_missing", { boardId, userId, pathname, method });
@@ -416,7 +418,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (method === "POST" && boardTeamMatch) {
-      const boardId = boardTeamMatch[1];
+      const boardId = decodePathSegment(boardTeamMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ name?: string; color?: string; avatarUrl?: string | null }>(req.body);
@@ -434,7 +436,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const boardLabelsMatch = pathname.match(/^\/boards\/([^/]+)\/labels$/i);
     if (method === "GET" && boardLabelsMatch) {
-      const boardId = boardLabelsMatch[1];
+      const boardId = decodePathSegment(boardLabelsMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) {
         console.warn("board_labels_access_denied_or_missing", { boardId, userId, pathname, method });
@@ -459,7 +461,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (method === "POST" && boardLabelsMatch) {
-      const boardId = boardLabelsMatch[1];
+      const boardId = decodePathSegment(boardLabelsMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ name?: string; color?: string }>(req.body);
@@ -484,7 +486,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const boardColumnsMatch = pathname.match(/^\/boards\/([^/]+)\/columns$/i);
     if (method === "POST" && boardColumnsMatch) {
-      const boardId = boardColumnsMatch[1];
+      const boardId = decodePathSegment(boardColumnsMatch[1] ?? "");
       if (!isUuidLike(boardId)) return invalidPathId(res, "board id");
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ title?: string; position?: number }>(req.body);
@@ -503,7 +505,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const columnPatchMatch = pathname.match(/^\/columns\/([^/]+)$/i);
     if (method === "PATCH" && columnPatchMatch) {
-      const columnId = columnPatchMatch[1];
+      const columnId = decodePathSegment(columnPatchMatch[1] ?? "");
       if (!isUuidLike(columnId)) return invalidPathId(res, "column id");
       const column = await tx.column.findUnique({ where: { id: columnId } });
       if (!column || !(await canAccessBoard(userId, column.boardId))) return sendError(res, 404, "not found");
@@ -520,7 +522,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const columnTasksMatch = pathname.match(/^\/columns\/([^/]+)\/tasks$/i);
     if (method === "POST" && columnTasksMatch) {
-      const columnId = columnTasksMatch[1];
+      const columnId = decodePathSegment(columnTasksMatch[1] ?? "");
       if (!isUuidLike(columnId)) return invalidPathId(res, "column id");
       const column = await tx.column.findUnique({ where: { id: columnId } });
       if (!column) {

@@ -45,7 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     env: {
       hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
       hasSupabaseJwtSecret: Boolean(process.env.SUPABASE_JWT_SECRET?.trim()),
-      hasDirectUrl: Boolean(process.env.DIRECT_URL),
       nodeEnv: process.env.NODE_ENV ?? null,
       vercelEnv: process.env.VERCEL_ENV ?? null,
     },

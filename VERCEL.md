@@ -48,12 +48,11 @@ Enable the same keys for **Preview** as for **Production** if you use preview UR
 
 | Variable | Purpose |
 | -------- | ------- |
-| `DATABASE_URL` | Prisma + `/api` runtime (Supabase **pooler** `…:6543/...?pgbouncer=true` on Vercel/serverless). |
-| `DIRECT_URL` | **Required for `prisma generate` on Vercel** — Supabase **direct** Postgres (`db.<ref>.supabase.co:5432`, not the pooler). Same variable is used by `prisma migrate` locally. |
+| `DATABASE_URL` | Prisma + `/api` runtime. On Vercel, prefer Supabase **pooler** `…:6543/...?pgbouncer=true`. For local `prisma db push`, if you see pooler-related errors, use the **direct** Postgres URI (`db.<ref>.supabase.co:5432`) in your root `.env` instead. |
 | `SUPABASE_JWT_SECRET` | Verifies Supabase JWTs in serverless API ([`api/_lib/auth.ts`](api/_lib/auth.ts)). From Supabase dashboard → **Settings → API → JWT Secret**. |
 | `VITE_SUPABASE_URL` | Public Supabase project URL for the browser. |
 | `VITE_SUPABASE_ANON_KEY` | Public **anon** key only (never the service role key). |
-| `VITE_API_URL` | Browser base URL for your API, e.g. `https://<your-project>.vercel.app/api` (avoid trailing-slash mismatches with your client code). |
+| `VITE_API_URL` | **Set to `/api`** (same for Production, Preview, and Development). The browser then always calls the API on **the same host** as the page—Preview deploys hit the Preview API, not Production. Do not hardcode `https://…vercel.app/api` unless you intentionally pin a fixed backend. |
 
 `prisma generate` during build does not require a live database; `DATABASE_URL` is still required at **runtime** for API routes that use Prisma.
 
@@ -61,9 +60,10 @@ Enable the same keys for **Preview** as for **Production** if you use preview UR
 
 If **`prisma migrate deploy`** runs during CI/Vercel on a **non-empty** Supabase database that was never tracked by Prisma Migrate, the build fails with **P3005** (*database schema is not empty*). The Vercel build therefore uses **`pnpm prisma:vercel-build`** = `prisma generate` only.
 
-**Apply schema changes yourself** (one-off from your machine with `DATABASE_URL` / `DIRECT_URL`):
+**Apply schema changes yourself** (one-off from your machine with `DATABASE_URL` in a root `.env` or your shell):
 
-- Quick align: `pnpm prisma:db-push`
+- Quick align: **`pnpm install`** then **`pnpm prisma:db-push`** (uses the repo’s **Prisma 5.x** from `node_modules`).
+- **Do not run bare `npx prisma db push`** without a version: npm will install **Prisma 7+**, which rejects `url` / `directUrl` in `schema.prisma` (error **P1012**). If you must use npx, pin it: `npx prisma@5.22.0 db push`.
 - Or: `pnpm prisma:migrate:deploy` after you [baseline](https://www.prisma.io/docs/guides/migrate/production-troubleshooting#baseline-an-existing-database-production-db-already-has-a-schema) the DB (e.g. mark existing migrations as applied with `prisma migrate resolve` when tables already match).
 
 After the DB is baselined and you want migrations on every deploy, you can switch `vercel.json` **buildCommand** to use `pnpm prisma:vercel-build:with-migrate` instead (and ensure build env has DB credentials).

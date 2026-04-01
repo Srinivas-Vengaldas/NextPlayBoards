@@ -40,6 +40,10 @@ export function getApiBaseUrl(): string {
   }
 }
 
+/** Resolved once at startup for console diagnostics (client still uses `getApiBaseUrl()` per request). */
+const apiBaseUrlResolved = getApiBaseUrl();
+console.log("API Base URL:", apiBaseUrlResolved);
+
 /**
  * Returns a usable access token for our Vercel API. Refreshes the session when close to expiry
  * so we don't send an expired JWT (backend would return 401).

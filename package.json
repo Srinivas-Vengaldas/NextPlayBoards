@@ -12,13 +12,14 @@
     "lint:web": "pnpm --filter @nextplay/web lint",
     "prisma:generate": "prisma generate",
     "prisma:pull": "prisma db pull",
-    "prisma:db-push": "prisma db push",
+    "prisma:db-push": "node scripts/prisma-db-push.cjs",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:vercel-build": "prisma generate",
     "prisma:vercel-build:with-migrate": "prisma generate && prisma migrate deploy"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
+    "dotenv": "^16.4.7",
     "typescript": "^5.7.2"
   },
   "packageManager": "pnpm@9.15.0",

@@ -17,14 +17,13 @@ function pathSegmentCount(p: string): number {
 export function stripApiPrefix(pathWithApi: string): string {
   let s = pathWithApi.trim().replace(/\/+/g, "/");
   if (!s.startsWith("/")) s = `/${s}`;
-  while (s.startsWith("/api")) {
-    if (s === "/api" || s === "/api/") {
+  // Case-insensitive: some proxies or clients may send `/API/...`; regex routes expect `/boards/...` not `/api/...`.
+  while (s.length >= 4 && s.slice(0, 4).toLowerCase() === "/api") {
+    const rest = s.slice(4);
+    if (rest === "" || rest === "/") {
       s = "/";
     } else {
-      s = s.slice(4);
-      if (s !== "/" && !s.startsWith("/")) {
-        s = `/${s}`;
-      }
+      s = rest.startsWith("/") ? rest : `/${rest}`;
     }
   }
   return s || "/";
@@ -72,6 +71,8 @@ export function resolveApiPathnameDebug(req: VercelRequest): { fromUrl: string; 
     merged = fromUrl || fromQuery || "/";
   }
 
-  const final = normalizeApiPath(stripApiPrefix(normalizeApiPath(merged)));
+  let final = normalizeApiPath(stripApiPrefix(normalizeApiPath(merged)));
+  final = normalizeApiPath(stripApiPrefix(final));
+  console.log("RESOLVED_PATH", final);
   return { fromUrl, fromQuery, final };
 }

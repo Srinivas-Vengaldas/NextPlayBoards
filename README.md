@@ -30,7 +30,7 @@ Set:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_API_URL` (e.g. `http://localhost:8080`)
+- `VITE_API_URL` — use **`/api`** so each environment (including Vercel Preview) calls its own deployment’s API. See [`VERCEL.md`](VERCEL.md). For local-only setups with a separate backend URL, see `apps/web/src/lib/api.ts`.
 
 #### API runtime (Prisma)
 
@@ -38,8 +38,10 @@ The web app calls `/api/*` endpoints served by Vercel Functions.
 
 Set these environment variables in Vercel:
 
-- `DATABASE_URL` (Supabase Postgres connection string, preferably pooled)
+- `DATABASE_URL` (Supabase Postgres connection string; pooled on Vercel is typical—see [`VERCEL.md`](VERCEL.md))
 - `SUPABASE_JWT_SECRET` (JWT secret used by Supabase)
+
+**Sync the database schema from your laptop** (after Vercel stopped running `migrate deploy`): from the repo root, create **`.env`** next to `package.json` with `DATABASE_URL` (copy [`.env.example`](.env.example) → `.env`). Putting the URI only in `apps/web/.env` will **not** work for Prisma. Then run **`pnpm install`** and **`pnpm prisma:db-push`**. Do not use bare `npx prisma` (it can install Prisma 7 and fail with **P1012**). Prefer **Node 20.x** (`engines` in `package.json`).
 
 ### 2) Run the web app
 
