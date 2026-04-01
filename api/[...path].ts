@@ -33,6 +33,44 @@ function persistedTaskIdError(res: VercelResponse, taskId: string): boolean {
   return false;
 }
 
+function isMissingTaskLabelsTableError(err: unknown): boolean {
+  const code =
+    err && typeof err === "object" && "code" in err ? String((err as { code: unknown }).code) : "";
+  if (code === "P2021") return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /task_labels/i.test(msg) && /does not exist/i.test(msg);
+}
+
+function boardDetailInclude(withTaskLabels: boolean) {
+  const taskInclude: Record<string, unknown> = {
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+    include: {
+      assignees: true,
+      teamAssignees: { include: { teamMember: true } },
+    },
+  };
+  if (withTaskLabels) {
+    (taskInclude.include as Record<string, unknown>).labels = { include: { label: true } };
+  }
+  return {
+    columns: {
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      include: { tasks: taskInclude },
+    },
+  };
+}
+
+function taskDetailInclude(withLabels: boolean) {
+  const include: Record<string, unknown> = {
+    assignees: true,
+    teamAssignees: { include: { teamMember: true } },
+  };
+  if (withLabels) {
+    include.labels = { include: { label: true } };
+  }
+  return include;
+}
+
 function taskDto(task: any) {
   return {
     id: task.id,
@@ -219,37 +257,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // NOTE: RLS context is set in `runWithRls()` before this runs.
         board = await tx.board.findUnique({
           where: { id: boardId },
-          include: {
-            columns: {
-              orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-              include: {
-                tasks: {
-                  orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-                  include: {
-                    labels: { include: { label: true } },
-                    assignees: true,
-                    teamAssignees: { include: { teamMember: true } },
-                  },
-                },
-              },
-            },
-          },
+          include: boardDetailInclude(true),
         });
       } catch (err) {
-        const prismaMeta =
-          err && typeof err === "object" && "meta" in err ? (err as { meta?: unknown }).meta : undefined;
-        const prismaCode =
-          err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : undefined;
-        console.error("board_fetch_error", {
-          boardId,
-          userId,
-          pathname,
-          method,
-          prismaCode,
-          prismaMeta,
-          error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
-        });
-        return sendError(res, 500, "database error");
+        if (isMissingTaskLabelsTableError(err)) {
+          console.warn("board_fetch_fallback_no_task_labels", { boardId, userId, pathname, method });
+          try {
+            board = await tx.board.findUnique({
+              where: { id: boardId },
+              include: boardDetailInclude(false),
+            });
+          } catch (err2) {
+            const prismaMeta =
+              err2 && typeof err2 === "object" && "meta" in err2
+                ? (err2 as { meta?: unknown }).meta
+                : undefined;
+            const prismaCode =
+              err2 && typeof err2 === "object" && "code" in err2
+                ? String((err2 as { code?: unknown }).code)
+                : undefined;
+            console.error("board_fetch_error_after_fallback", {
+              boardId,
+              userId,
+              pathname,
+              method,
+              prismaCode,
+              prismaMeta,
+              error:
+                err2 instanceof Error
+                  ? { name: err2.name, message: err2.message, stack: err2.stack }
+                  : String(err2),
+            });
+            return sendError(res, 500, "database error");
+          }
+        } else {
+          const prismaMeta =
+            err && typeof err === "object" && "meta" in err ? (err as { meta?: unknown }).meta : undefined;
+          const prismaCode =
+            err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : undefined;
+          console.error("board_fetch_error", {
+            boardId,
+            userId,
+            pathname,
+            method,
+            prismaCode,
+            prismaMeta,
+            error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
+          });
+          return sendError(res, 500, "database error");
+        }
       }
       if (!board) {
         console.warn("board_missing_after_access_check", { boardId, userId, pathname, method });
@@ -494,14 +550,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           dueAt: body.dueAt ? new Date(body.dueAt) : null,
         },
       });
-      const full = await tx.task.findUnique({
-        where: { id: created.id },
-        include: {
-          labels: { include: { label: true } },
-          assignees: true,
-          teamAssignees: { include: { teamMember: true } },
-        },
-      });
+      let full: any = null;
+      try {
+        full = await tx.task.findUnique({
+          where: { id: created.id },
+          include: taskDetailInclude(true),
+        });
+      } catch (err) {
+        if (isMissingTaskLabelsTableError(err)) {
+          console.warn("task_create_fetch_fallback_no_task_labels", { taskId: created.id, columnId, userId });
+          try {
+            full = await tx.task.findUnique({
+              where: { id: created.id },
+              include: taskDetailInclude(false),
+            });
+          } catch (err2) {
+            console.error("task_create_fetch_error_after_fallback", {
+              taskId: created.id,
+              error: err2 instanceof Error ? err2.message : String(err2),
+            });
+            return sendError(res, 500, "database error");
+          }
+        } else {
+          console.error("task_create_fetch_error", {
+            taskId: created.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return sendError(res, 500, "database error");
+        }
+      }
       if (!full) return sendError(res, 500, "database error");
       return sendJson(res, 201, taskDto(full));
     }

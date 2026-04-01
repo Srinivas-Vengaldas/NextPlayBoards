@@ -13,7 +13,8 @@
     "prisma:generate": "prisma generate",
     "prisma:pull": "prisma db pull",
     "prisma:db-push": "prisma db push",
-    "prisma:migrate:deploy": "prisma migrate deploy"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:vercel-build": "prisma generate && prisma migrate deploy"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",

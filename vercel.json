@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm prisma:generate && pnpm --filter @nextplay/shared build && pnpm --filter @nextplay/web build",
+  "buildCommand": "pnpm prisma:vercel-build && pnpm --filter @nextplay/shared build && pnpm --filter @nextplay/web build",
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/**/*.ts": {
