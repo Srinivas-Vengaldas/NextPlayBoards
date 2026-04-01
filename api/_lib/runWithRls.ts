@@ -10,6 +10,7 @@ import { prisma } from "./prisma";
  */
 export async function runWithRls<T>(userId: string, fn: (tx: any) => Promise<T>): Promise<T> {
   return prisma.$transaction(async (tx) => {
+    // Transaction-local JWT claim for Supabase RLS (works with PgBouncer transaction pooling on 6543).
     await tx.$executeRawUnsafe("SELECT set_config('request.jwt.claim.sub', $1::text, true)", userId);
     return fn(tx);
   });

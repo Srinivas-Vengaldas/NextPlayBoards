@@ -10,34 +10,23 @@ function pathSegmentCount(p: string): number {
   return p.split("/").filter(Boolean).length;
 }
 
-export function resolveApiPathname(req: VercelRequest): string {
-  const q = req.query?.path;
-  const parts: string[] = Array.isArray(q) ? q.map(String) : q != null && String(q) !== "" ? [String(q)] : [];
-  const fromQuery = parts.length > 0 ? normalizeApiPath("/" + parts.join("/")) : "";
-
-  let fromUrl = "";
-  const raw = req.url;
-  if (raw != null && raw !== "") {
-    try {
-      const pathname = new URL(raw, "https://nextplay.invalid").pathname;
-      fromUrl = normalizeApiPath(stripApiPrefix(pathname));
-    } catch {
-      const p = raw.startsWith("/") ? raw : `/${raw}`;
-      fromUrl = normalizeApiPath(stripApiPrefix(p));
+/**
+ * Removes a leading `/api` segment (and repeats) so router paths are always like `/boards/...`,
+ * never `/api/boards/...`. Always returns a path with a leading slash (or `/`).
+ */
+export function stripApiPrefix(pathWithApi: string): string {
+  let s = pathWithApi.startsWith("/") ? pathWithApi : `/${pathWithApi}`;
+  while (s.startsWith("/api")) {
+    if (s === "/api" || s === "/api/") {
+      s = "/";
+    } else {
+      s = s.slice(4);
+      if (s !== "/" && !s.startsWith("/")) {
+        s = `/${s}`;
+      }
     }
   }
-
-  const countQuery = pathSegmentCount(fromQuery);
-  const countUrl = pathSegmentCount(fromUrl);
-
-  if (fromQuery && fromUrl) {
-    return countUrl >= countQuery ? fromUrl : fromQuery;
-  }
-  return fromUrl || fromQuery || "/";
-}
-
-function stripApiPrefix(pathWithApi: string): string {
-  return pathWithApi.replace(/^\/api(\/|$)/, "/") || "/";
+  return s || "/";
 }
 
 export function normalizeApiPath(p: string): string {
@@ -46,4 +35,41 @@ export function normalizeApiPath(p: string): string {
     s = s.replace(/\/+$/, "");
   }
   return s || "/";
+}
+
+export function resolveApiPathname(req: VercelRequest): string {
+  return resolveApiPathnameDebug(req).final;
+}
+
+export function resolveApiPathnameDebug(req: VercelRequest): { fromUrl: string; fromQuery: string; final: string } {
+  const q = req.query?.path;
+  const parts: string[] = Array.isArray(q) ? q.map(String) : q != null && String(q) !== "" ? [String(q)] : [];
+  const fromQuery = parts.length > 0 ? normalizeApiPath("/" + parts.join("/")) : "";
+
+  let fromUrl = "";
+  const raw = req.url;
+  if (raw != null && raw !== "") {
+    try {
+      const pathnameOnly = new URL(raw, "https://nextplay.invalid").pathname;
+      fromUrl = normalizeApiPath(stripApiPrefix(pathnameOnly));
+    } catch {
+      const p = raw.startsWith("/") ? raw : `/${raw}`;
+      const qIdx = p.indexOf("?");
+      const pathPart = qIdx >= 0 ? p.slice(0, qIdx) : p;
+      fromUrl = normalizeApiPath(stripApiPrefix(pathPart));
+    }
+  }
+
+  const countQuery = pathSegmentCount(fromQuery);
+  const countUrl = pathSegmentCount(fromUrl);
+
+  let merged = "";
+  if (fromQuery && fromUrl) {
+    merged = countUrl >= countQuery ? fromUrl : fromQuery;
+  } else {
+    merged = fromUrl || fromQuery || "/";
+  }
+
+  const final = normalizeApiPath(stripApiPrefix(merged));
+  return { fromUrl, fromQuery, final };
 }
