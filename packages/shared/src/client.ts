@@ -18,6 +18,7 @@ import {
   patchTaskBodySchema,
   taskActivitySchema,
   taskCommentSchema,
+  taskSchema,
   type BoardMemberSearch,
   type BoardMember,
   type TeamMember,
@@ -26,6 +27,7 @@ import {
   type BoardSummary,
   type TaskActivity,
   type TaskComment,
+  type Task,
 } from "./schemas.js";
 
 export type GetToken = () => Promise<string | null> | string | null;
@@ -144,19 +146,13 @@ export function createApiClient(baseUrl: ApiBaseUrl, getToken: GetToken) {
       await readJson(res, () => undefined);
     },
 
-    async createTask(columnId: string, body: CreateTaskBody): Promise<{ id: string }> {
+    async createTask(columnId: string, body: CreateTaskBody): Promise<Task> {
       const res = await fetch(`${root()}/columns/${encodeURIComponent(columnId)}/tasks`, {
         method: "POST",
         headers: await authHeader(getToken),
         body: JSON.stringify(body),
       });
-      return readJson(res, (d) => {
-        const o = d as Record<string, unknown>;
-        if (!o?.id || typeof o.id !== "string") {
-          throw new Error("Invalid response");
-        }
-        return { id: o.id };
-      });
+      return readJson(res, (d) => taskSchema.parse(normalizeDates(d)));
     },
 
     async patchTask(taskId: string, body: PatchTaskBody): Promise<void> {

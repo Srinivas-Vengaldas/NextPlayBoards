@@ -612,9 +612,16 @@ export default function KanbanBoard({
   });
 
   const taskCreate = useMutation({
-    mutationFn: ({ columnId, title }: { columnId: string; title: string }) =>
+    mutationFn: ({ columnId, title, optimisticId }: { columnId: string; title: string; optimisticId: string }) =>
       api.createTask(columnId, { title, priority: "none", description: "" }),
-    onSuccess: () => {
+    onSuccess: (created, variables) => {
+      setColumnsState((prev) =>
+        prev.map((col) => ({
+          ...col,
+          tasks: col.tasks.map((t) => (t.id === variables.optimisticId ? created : t)),
+        })),
+      );
+      setSelectedTaskId((cur) => (cur === variables.optimisticId ? created.id : cur));
       void queryClient.invalidateQueries({ queryKey: ["board", boardId] });
     },
     onError: (err: Error) => {
@@ -802,7 +809,7 @@ export default function KanbanBoard({
     setDraftTaskTitleByColumn((prev) => ({ ...prev, [columnId]: "" }));
     setComposerOpenByColumn((prev) => ({ ...prev, [columnId]: false }));
 
-    void taskCreate.mutate({ columnId, title });
+    void taskCreate.mutate({ columnId, title, optimisticId: tempId });
   }
 
   const anyFiltersActive = Boolean(searchTerm?.trim()) || priorityFilter !== "all" || labelFilter !== "all" || assigneeFilter !== "all";
