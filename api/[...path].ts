@@ -1,34 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { prisma } from "./_lib/prisma";
 import { getUserIdFromRequest } from "./_lib/auth";
 import { applyCors, isUuidLike, readBody, sendError, sendJson } from "./_lib/http";
+import { normalizeApiPath, resolveApiPathname } from "./_lib/resolveApiPathname";
+import { runWithRls } from "./_lib/runWithRls";
 
 type Priority = "none" | "low" | "medium" | "high" | "urgent";
-
-async function canAccessBoard(userId: string, boardId: string): Promise<boolean> {
-  const board = await prisma.board.findFirst({
-    where: {
-      id: boardId,
-      OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-    },
-    select: { id: true },
-  });
-  return Boolean(board);
-}
-
-async function canAdminBoard(userId: string, boardId: string): Promise<boolean> {
-  const board = await prisma.board.findFirst({
-    where: {
-      id: boardId,
-      OR: [
-        { ownerId: userId },
-        { members: { some: { userId, role: { in: ["owner", "admin"] } } } },
-      ],
-    },
-    select: { id: true },
-  });
-  return Boolean(board);
-}
 
 function taskDto(task: any) {
   return {
@@ -58,24 +34,6 @@ function taskDto(task: any) {
   };
 }
 
-async function createActivity(
-  taskId: string,
-  actorId: string,
-  actionType: string,
-  message: string,
-  metadata: Record<string, unknown> = {},
-) {
-  try {
-    await prisma.taskActivityNew.create({
-      data: { taskId, actorId, actionType, message, metadata: metadata as any },
-    });
-  } catch {
-    await prisma.taskActivityOld.create({
-      data: { taskId, actorId, actionType, metadata: metadata as any },
-    });
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   applyCors(req, res);
   if ((req.method || "GET") === "OPTIONS") {
@@ -87,12 +45,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendError(res, 401, "unauthorized");
   }
 
-  const pathname = new URL(req.url || "/", "https://nextplay.local").pathname.replace(/^\/api/, "");
+  const pathname = normalizeApiPath(resolveApiPathname(req));
   const method = req.method || "GET";
 
   try {
-    if (method === "GET" && pathname === "/boards") {
-      const boards = await prisma.board.findMany({
+    await runWithRls(userId, async (tx) => {
+      async function canAccessBoard(uid: string, boardId: string): Promise<boolean> {
+        const board = await tx.board.findFirst({
+          where: {
+            id: boardId,
+            OR: [{ ownerId: uid }, { members: { some: { userId: uid } } }],
+          },
+          select: { id: true },
+        });
+        return Boolean(board);
+      }
+
+      async function canAdminBoard(uid: string, boardId: string): Promise<boolean> {
+        const board = await tx.board.findFirst({
+          where: {
+            id: boardId,
+            OR: [
+              { ownerId: uid },
+              { members: { some: { userId: uid, role: { in: ["owner", "admin"] } } } },
+            ],
+          },
+          select: { id: true },
+        });
+        return Boolean(board);
+      }
+
+      async function createActivity(
+        taskId: string,
+        actorId: string,
+        actionType: string,
+        message: string,
+        metadata: Record<string, unknown> = {},
+      ) {
+        try {
+          await tx.taskActivityNew.create({
+            data: { taskId, actorId, actionType, message, metadata: metadata as any },
+          });
+        } catch {
+          await tx.taskActivityOld.create({
+            data: { taskId, actorId, actionType, metadata: metadata as any },
+          });
+        }
+      }
+
+      if (method === "GET" && pathname === "/boards") {
+        const boards = await tx.board.findMany({
         where: {
           OR: [{ ownerId: userId }, { members: { some: { userId } } }],
         },
@@ -115,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = await readBody<{ title?: string }>(req.body);
       if (!body.title?.trim()) return sendError(res, 400, "invalid body");
 
-      const created = await prisma.board.create({
+      const created = await tx.board.create({
         data: {
           title: body.title.trim(),
           ownerId: userId,
@@ -139,7 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const boardId = boardMatch[1];
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
 
-      const board = await prisma.board.findUnique({
+      const board = await tx.board.findUnique({
         where: { id: boardId },
         include: {
           columns: {
@@ -181,7 +183,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "GET" && boardMembersMatch) {
       const boardId = boardMembersMatch[1];
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
-      const members = await prisma.boardMember.findMany({
+      const members = await tx.boardMember.findMany({
         where: { boardId },
         include: { user: true },
       });
@@ -201,7 +203,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!(await canAdminBoard(userId, boardId))) return sendError(res, 403, "forbidden");
       const body = await readBody<{ userId?: string }>(req.body);
       if (!body.userId || !isUuidLike(body.userId)) return sendError(res, 400, "invalid userId");
-      await prisma.boardMember.upsert({
+      await tx.boardMember.upsert({
         where: { boardId_userId: { boardId, userId: body.userId } },
         update: {},
         create: { boardId, userId: body.userId, role: "member" },
@@ -218,7 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const where = isUuidLike(q)
         ? { id: q }
         : { displayName: { contains: q, mode: "insensitive" as const } };
-      const profiles = await prisma.profile.findMany({ where, take: 5 });
+      const profiles = await tx.profile.findMany({ where, take: 5 });
       return sendJson(
         res,
         200,
@@ -235,7 +237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "GET" && boardTeamMatch) {
       const boardId = boardTeamMatch[1];
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
-      const members = await prisma.teamMember.findMany({
+      const members = await tx.teamMember.findMany({
         where: { boardId },
         orderBy: { createdAt: "asc" },
       });
@@ -257,7 +259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ name?: string; color?: string; avatarUrl?: string | null }>(req.body);
       if (!body.name?.trim()) return sendError(res, 400, "invalid body");
-      const created = await prisma.teamMember.create({
+      const created = await tx.teamMember.create({
         data: {
           boardId,
           name: body.name.trim(),
@@ -272,7 +274,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "GET" && boardLabelsMatch) {
       const boardId = boardLabelsMatch[1];
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
-      const labels = await prisma.label.findMany({
+      const labels = await tx.label.findMany({
         where: { boardId },
         orderBy: { name: "asc" },
       });
@@ -295,18 +297,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ name?: string; color?: string }>(req.body);
       if (!body.name?.trim()) return sendError(res, 400, "invalid body");
-      const existing = await prisma.label.findFirst({
+      const existing = await tx.label.findFirst({
         where: { boardId, name: { equals: body.name.trim(), mode: "insensitive" } },
       });
       if (existing) {
-        const updated = await prisma.label.update({
+        const updated = await tx.label.update({
           where: { id: existing.id },
           data: { color: body.color || existing.color },
           select: { id: true },
         });
         return sendJson(res, 200, { id: updated.id });
       }
-      const created = await prisma.label.create({
+      const created = await tx.label.create({
         data: { boardId, name: body.name.trim(), color: body.color || "#64748b" },
         select: { id: true },
       });
@@ -319,8 +321,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ title?: string; position?: number }>(req.body);
       if (!body.title?.trim()) return sendError(res, 400, "invalid body");
-      const max = await prisma.column.aggregate({ where: { boardId }, _max: { position: true } });
-      const created = await prisma.column.create({
+      const max = await tx.column.aggregate({ where: { boardId }, _max: { position: true } });
+      const created = await tx.column.create({
         data: {
           boardId,
           title: body.title.trim(),
@@ -334,10 +336,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const columnPatchMatch = pathname.match(/^\/columns\/([0-9a-f-]+)$/i);
     if (method === "PATCH" && columnPatchMatch) {
       const columnId = columnPatchMatch[1];
-      const column = await prisma.column.findUnique({ where: { id: columnId } });
+      const column = await tx.column.findUnique({ where: { id: columnId } });
       if (!column || !(await canAccessBoard(userId, column.boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ title?: string; position?: number }>(req.body);
-      await prisma.column.update({
+      await tx.column.update({
         where: { id: columnId },
         data: {
           title: body.title,
@@ -350,7 +352,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const columnTasksMatch = pathname.match(/^\/columns\/([0-9a-f-]+)\/tasks$/i);
     if (method === "POST" && columnTasksMatch) {
       const columnId = columnTasksMatch[1];
-      const column = await prisma.column.findUnique({ where: { id: columnId } });
+      const column = await tx.column.findUnique({ where: { id: columnId } });
       if (!column || !(await canAccessBoard(userId, column.boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{
         title?: string;
@@ -360,8 +362,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         dueAt?: string | null;
       }>(req.body);
       if (!body.title?.trim()) return sendError(res, 400, "invalid body");
-      const max = await prisma.task.aggregate({ where: { columnId }, _max: { position: true } });
-      const created = await prisma.task.create({
+      const max = await tx.task.aggregate({ where: { columnId }, _max: { position: true } });
+      const created = await tx.task.create({
         data: {
           columnId,
           title: body.title.trim(),
@@ -378,7 +380,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const patchTaskMatch = pathname.match(/^\/tasks\/([0-9a-f-]+)$/i);
     if (method === "PATCH" && patchTaskMatch) {
       const taskId = patchTaskMatch[1];
-      const existing = await prisma.task.findUnique({
+      const existing = await tx.task.findUnique({
         where: { id: taskId },
         include: { column: true },
       });
@@ -395,7 +397,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         assigneeId?: string | null;
       }>(req.body);
 
-      await prisma.task.update({
+      await tx.task.update({
         where: { id: taskId },
         data: {
           title: body.title,
@@ -409,7 +411,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       if (body.columnId && body.columnId !== existing.columnId) {
-        const nextCol = await prisma.column.findUnique({ where: { id: body.columnId } });
+        const nextCol = await tx.column.findUnique({ where: { id: body.columnId } });
         await createActivity(taskId, userId, "task_moved", "Moved task to another column", {
           fromColumnId: existing.columnId,
           toColumnId: body.columnId,
@@ -427,9 +429,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const commentsMatch = pathname.match(/^\/tasks\/([0-9a-f-]+)\/comments$/i);
     if (method === "GET" && commentsMatch) {
       const taskId = commentsMatch[1];
-      const task = await prisma.task.findUnique({ where: { id: taskId }, include: { column: true } });
+      const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
-      const comments = await prisma.taskComment.findMany({
+      const comments = await tx.taskComment.findMany({
         where: { taskId },
         orderBy: { createdAt: "asc" },
       });
@@ -447,11 +449,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (method === "POST" && commentsMatch) {
       const taskId = commentsMatch[1];
-      const task = await prisma.task.findUnique({ where: { id: taskId }, include: { column: true } });
+      const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ content?: string }>(req.body);
       if (!body.content?.trim()) return sendError(res, 400, "invalid body");
-      await prisma.taskComment.create({
+      await tx.taskComment.create({
         data: {
           taskId,
           userId,
@@ -466,16 +468,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const activityMatch = pathname.match(/^\/tasks\/([0-9a-f-]+)\/activity$/i);
     if (method === "GET" && activityMatch) {
       const taskId = activityMatch[1];
-      const task = await prisma.task.findUnique({ where: { id: taskId }, include: { column: true } });
+      const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
       let items: any[] = [];
       try {
-        items = await prisma.taskActivityNew.findMany({
+        items = await tx.taskActivityNew.findMany({
           where: { taskId },
           orderBy: { createdAt: "desc" },
         });
       } catch {
-        items = await prisma.taskActivityOld.findMany({
+        items = await tx.taskActivityOld.findMany({
           where: { taskId },
           orderBy: { createdAt: "desc" },
         });
@@ -498,11 +500,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const taskLabelsMatch = pathname.match(/^\/tasks\/([0-9a-f-]+)\/labels$/i);
     if (method === "POST" && taskLabelsMatch) {
       const taskId = taskLabelsMatch[1];
-      const task = await prisma.task.findUnique({ where: { id: taskId }, include: { column: true } });
+      const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
       const body = await readBody<{ labelId?: string }>(req.body);
       if (!body.labelId || !isUuidLike(body.labelId)) return sendError(res, 400, "invalid body");
-      await prisma.taskLabel.upsert({
+      await tx.taskLabel.upsert({
         where: { taskId_labelId: { taskId, labelId: body.labelId } },
         update: {},
         create: { taskId, labelId: body.labelId },
@@ -514,21 +516,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "DELETE" && taskLabelDeleteMatch) {
       const taskId = taskLabelDeleteMatch[1];
       const labelId = taskLabelDeleteMatch[2];
-      await prisma.taskLabel.deleteMany({ where: { taskId, labelId } });
+      await tx.taskLabel.deleteMany({ where: { taskId, labelId } });
       return sendJson(res, 204, null);
     }
 
     const taskAssigneesMatch = pathname.match(/^\/tasks\/([0-9a-f-]+)\/assignees$/i);
     if (method === "GET" && taskAssigneesMatch) {
       const taskId = taskAssigneesMatch[1];
-      const assignees = await prisma.taskAssignee.findMany({ where: { taskId }, orderBy: { createdAt: "asc" } });
+      const assignees = await tx.taskAssignee.findMany({ where: { taskId }, orderBy: { createdAt: "asc" } });
       return sendJson(res, 200, assignees.map((a) => a.userId));
     }
     if (method === "POST" && taskAssigneesMatch) {
       const taskId = taskAssigneesMatch[1];
       const body = await readBody<{ userId?: string }>(req.body);
       if (!body.userId || !isUuidLike(body.userId)) return sendError(res, 400, "invalid userId");
-      await prisma.taskAssignee.upsert({
+      await tx.taskAssignee.upsert({
         where: { taskId_userId: { taskId, userId: body.userId } },
         update: {},
         create: { taskId, userId: body.userId },
@@ -540,7 +542,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "DELETE" && taskAssigneeDeleteMatch) {
       const taskId = taskAssigneeDeleteMatch[1];
       const assigneeId = taskAssigneeDeleteMatch[2];
-      await prisma.taskAssignee.deleteMany({ where: { taskId, userId: assigneeId } });
+      await tx.taskAssignee.deleteMany({ where: { taskId, userId: assigneeId } });
       return sendJson(res, 204, null);
     }
 
@@ -549,7 +551,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const taskId = taskTeamMemberMatch[1];
       const body = await readBody<{ memberId?: string }>(req.body);
       if (!body.memberId || !isUuidLike(body.memberId)) return sendError(res, 400, "invalid memberId");
-      await prisma.taskTeamAssignee.upsert({
+      await tx.taskTeamAssignee.upsert({
         where: { taskId_teamMemberId: { taskId, teamMemberId: body.memberId } },
         update: {},
         create: { taskId, teamMemberId: body.memberId },
@@ -564,7 +566,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "DELETE" && taskTeamMemberDeleteMatch) {
       const taskId = taskTeamMemberDeleteMatch[1];
       const memberId = taskTeamMemberDeleteMatch[2];
-      await prisma.taskTeamAssignee.deleteMany({ where: { taskId, teamMemberId: memberId } });
+      await tx.taskTeamAssignee.deleteMany({ where: { taskId, teamMemberId: memberId } });
       await createActivity(taskId, userId, "team_member_removed", "Unassigned a team member", {
         memberId,
       });
@@ -572,6 +574,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return sendError(res, 404, "not found");
+    });
   } catch (err) {
     console.error("prisma_api_error", err);
     return sendError(res, 500, "database error");

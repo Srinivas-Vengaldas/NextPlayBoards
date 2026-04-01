@@ -45,8 +45,8 @@ Enable the same keys for **Preview** as for **Production** if you use preview UR
 
 | Variable | Purpose |
 | -------- | ------- |
-| `DATABASE_URL` | Prisma + `/api` runtime (e.g. Supabase **pooler** connection string). |
-| `DIRECT_URL` | Optional; direct Postgres URL for local `prisma migrate` (often omitted on Vercel if you only run migrations locally). |
+| `DATABASE_URL` | Prisma + `/api` runtime (Supabase **pooler** `…:6543/...?pgbouncer=true` on Vercel/serverless). |
+| `DIRECT_URL` | **Required for `prisma generate` on Vercel** — Supabase **direct** Postgres (`db.<ref>.supabase.co:5432`, not the pooler). Same variable is used by `prisma migrate` locally. |
 | `SUPABASE_JWT_SECRET` | Verifies Supabase JWTs in serverless API ([`api/_lib/auth.ts`](api/_lib/auth.ts)). From Supabase dashboard → **Settings → API → JWT Secret**. |
 | `VITE_SUPABASE_URL` | Public Supabase project URL for the browser. |
 | `VITE_SUPABASE_ANON_KEY` | Public **anon** key only (never the service role key). |
