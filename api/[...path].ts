@@ -47,6 +47,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (preMethod === "GET" && prePathname === "/ping") {
     return sendJson(res, 200, { ok: true });
   }
+  if (preMethod === "GET" && prePathname === "/__debug") {
+    const auth = req.headers.authorization ?? null;
+    const hasBearer = typeof auth === "string" && auth.startsWith("Bearer ");
+    let resolvedUserId: string | null = null;
+    if (hasBearer) {
+      try {
+        resolvedUserId = await getUserIdFromRequest(req);
+      } catch (err) {
+        console.warn("debug_userid_resolution_failed", {
+          error: err instanceof Error ? { name: err.name, message: err.message } : String(err),
+        });
+      }
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      route: "__debug",
+      method: req.method ?? null,
+      path: req.url ?? null,
+      auth: {
+        hasAuthorizationHeader: Boolean(auth),
+        hasBearer,
+        canResolveUser: resolvedUserId !== null,
+        userId: resolvedUserId,
+      },
+      env: {
+        hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+        hasDirectUrl: Boolean(process.env.DIRECT_URL),
+        hasSupabaseJwtSecret: Boolean(process.env.SUPABASE_JWT_SECRET?.trim()),
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+      },
+    });
+  }
 
   const userId = await getUserIdFromRequest(req);
   if (!userId) {
