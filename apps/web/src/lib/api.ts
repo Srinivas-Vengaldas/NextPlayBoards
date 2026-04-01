@@ -1,10 +1,33 @@
 import { createApiClient } from "@nextplay/shared";
 import { supabase } from "./supabase";
 
-/** Same-origin `/api` unless `VITE_API_URL` is a non-empty string (trimmed). */
+/**
+ * Base URL for `createApiClient` paths like `/boards`, `/tasks`, … (final URLs are `${base}/boards/...`).
+ * - Empty → same-origin `/api` (correct for Vercel: handlers live under `/api/*`).
+ * - Absolute URL with **no path** (e.g. `https://project.vercel.app`) → append `/api`. A common mistake is
+ *   setting only the site origin; that produced `https://…/boards/…` and **404** because static hosting has no `/boards` route.
+ * - Already includes a path (e.g. `https://…/api` or `https://…/custom`) → use as-is (trailing slash stripped).
+ */
 export function getApiBaseUrl(): string {
-  const raw = import.meta.env.VITE_API_URL?.replace(/\/$/, "").trim() ?? "";
-  return raw.length > 0 ? raw : "/api";
+  const raw = (import.meta.env.VITE_API_URL ?? "").trim();
+  if (!raw) return "/api";
+
+  const noTrailingSlash = raw.replace(/\/+$/, "");
+
+  if (noTrailingSlash.startsWith("/")) {
+    return noTrailingSlash || "/api";
+  }
+
+  try {
+    const u = new URL(noTrailingSlash);
+    let path = u.pathname.replace(/\/+$/, "") || "";
+    if (path === "" || path === "/") {
+      path = "/api";
+    }
+    return `${u.origin}${path}`;
+  } catch {
+    return "/api";
+  }
 }
 
 /**
