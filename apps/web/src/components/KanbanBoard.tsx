@@ -559,17 +559,19 @@ export default function KanbanBoard({
     setColumnsState(sorted);
   }, [board]);
 
+  const selectedTaskIsOptimistic = Boolean(selectedTaskId) && selectedTaskId!.startsWith("tmp-task");
+
   const commentsQuery = useQuery({
     queryKey: ["taskComments", selectedTaskId],
     queryFn: () => api.listTaskComments(selectedTaskId!),
-    enabled: Boolean(selectedTaskId),
+    enabled: Boolean(selectedTaskId) && !selectedTaskIsOptimistic,
     refetchInterval: selectedTaskId ? 3500 : false,
   });
 
   const activityQuery = useQuery({
     queryKey: ["taskActivity", selectedTaskId],
     queryFn: () => api.listTaskActivity(selectedTaskId!),
-    enabled: Boolean(selectedTaskId),
+    enabled: Boolean(selectedTaskId) && !selectedTaskIsOptimistic,
     refetchInterval: selectedTaskId ? 3500 : false,
   });
 

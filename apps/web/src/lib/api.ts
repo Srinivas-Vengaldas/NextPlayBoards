@@ -70,6 +70,17 @@ async function getAccessTokenForApi(): Promise<string | null> {
 
     if (refreshError) {
       console.warn("[api] refreshSession failed:", refreshError.message);
+      // When the refresh token is revoked/rotated (or from another Supabase project),
+      // Supabase returns 400 "Invalid Refresh Token". Keeping the old access token causes
+      // repeated API failures; sign out to force a clean login.
+      if (/invalid refresh token/i.test(refreshError.message)) {
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.warn("[api] signOut after invalid refresh token failed:", String(e));
+        }
+        return null;
+      }
       return session.access_token;
     }
 
