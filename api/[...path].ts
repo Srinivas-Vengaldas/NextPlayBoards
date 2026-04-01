@@ -139,7 +139,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const boardMatch = pathname.match(/^\/boards\/([0-9a-f-]+)$/i);
     if (method === "GET" && boardMatch) {
       const boardId = boardMatch[1];
-      if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
+      if (!(await canAccessBoard(userId, boardId))) {
+        console.warn("board_access_denied_or_missing", { boardId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
 
       let board: any = null;
       try {
@@ -172,7 +175,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
         return sendError(res, 500, "database error");
       }
-      if (!board) return sendError(res, 404, "not found");
+      if (!board) {
+        console.warn("board_missing_after_access_check", { boardId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
 
       return sendJson(res, 200, {
         id: board.id,
@@ -195,7 +201,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const boardMembersMatch = pathname.match(/^\/boards\/([0-9a-f-]+)\/members$/i);
     if (method === "GET" && boardMembersMatch) {
       const boardId = boardMembersMatch[1];
-      if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
+      if (!(await canAccessBoard(userId, boardId))) {
+        console.warn("board_members_access_denied_or_missing", { boardId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
       const members = await tx.boardMember.findMany({
         where: { boardId },
         include: { user: true },
@@ -249,7 +258,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const boardTeamMatch = pathname.match(/^\/boards\/([0-9a-f-]+)\/team-members$/i);
     if (method === "GET" && boardTeamMatch) {
       const boardId = boardTeamMatch[1];
-      if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
+      if (!(await canAccessBoard(userId, boardId))) {
+        console.warn("board_team_members_access_denied_or_missing", { boardId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
       const members = await tx.teamMember.findMany({
         where: { boardId },
         orderBy: { createdAt: "asc" },
@@ -286,7 +298,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const boardLabelsMatch = pathname.match(/^\/boards\/([0-9a-f-]+)\/labels$/i);
     if (method === "GET" && boardLabelsMatch) {
       const boardId = boardLabelsMatch[1];
-      if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
+      if (!(await canAccessBoard(userId, boardId))) {
+        console.warn("board_labels_access_denied_or_missing", { boardId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
       const labels = await tx.label.findMany({
         where: { boardId },
         orderBy: { name: "asc" },
