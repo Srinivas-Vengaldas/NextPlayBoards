@@ -15,7 +15,8 @@ function pathSegmentCount(p: string): number {
  * never `/api/boards/...`. Always returns a path with a leading slash (or `/`).
  */
 export function stripApiPrefix(pathWithApi: string): string {
-  let s = pathWithApi.startsWith("/") ? pathWithApi : `/${pathWithApi}`;
+  let s = pathWithApi.trim().replace(/\/+/g, "/");
+  if (!s.startsWith("/")) s = `/${s}`;
   while (s.startsWith("/api")) {
     if (s === "/api" || s === "/api/") {
       s = "/";
@@ -30,7 +31,8 @@ export function stripApiPrefix(pathWithApi: string): string {
 }
 
 export function normalizeApiPath(p: string): string {
-  let s = p.startsWith("/") ? p : `/${p}`;
+  let s = p.trim().replace(/\/+/g, "/");
+  if (!s.startsWith("/")) s = `/${s}`;
   if (s.length > 1) {
     s = s.replace(/\/+$/, "");
   }
@@ -70,6 +72,6 @@ export function resolveApiPathnameDebug(req: VercelRequest): { fromUrl: string; 
     merged = fromUrl || fromQuery || "/";
   }
 
-  const final = normalizeApiPath(stripApiPrefix(merged));
+  const final = normalizeApiPath(stripApiPrefix(normalizeApiPath(merged)));
   return { fromUrl, fromQuery, final };
 }

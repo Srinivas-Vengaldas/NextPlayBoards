@@ -11,7 +11,9 @@
     "build:shared": "pnpm --filter @nextplay/shared build",
     "lint:web": "pnpm --filter @nextplay/web lint",
     "prisma:generate": "prisma generate",
-    "prisma:pull": "prisma db pull"
+    "prisma:pull": "prisma db pull",
+    "prisma:db-push": "prisma db push",
+    "prisma:migrate:deploy": "prisma migrate deploy"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",

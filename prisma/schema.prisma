@@ -106,6 +106,7 @@ model Label {
   @@map("labels")
 }
 
+/// Maps to `public.task_labels`. If P2021 (table missing), run `pnpm prisma:migrate:deploy` or `pnpm prisma:db-push` against Supabase.
 model TaskLabel {
   taskId    String   @map("task_id") @db.Uuid
   labelId   String   @map("label_id") @db.Uuid

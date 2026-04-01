@@ -10,6 +10,17 @@ function invalidPathId(res: VercelResponse, kind: string) {
   return sendError(res, 400, `invalid ${kind}`);
 }
 
+/** Decode path segment (handles % encoding) so tmp-* and UUID checks match the real id. */
+function parseTaskPathSegment(raw: string): string {
+  const t = raw.trim();
+  try {
+    return decodeURIComponent(t);
+  } catch {
+    return t;
+  }
+}
+
+/** Returns true after sending 400 — caller must return immediately (do not query Prisma). */
 function persistedTaskIdError(res: VercelResponse, taskId: string): boolean {
   if (taskId.startsWith("tmp-")) {
     sendError(res, 400, "temporary task id cannot be used until the task is created on the server");
@@ -497,7 +508,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const patchTaskMatch = pathname.match(/^\/tasks\/([^/]+)$/i);
     if (method === "PATCH" && patchTaskMatch) {
-      const taskId = patchTaskMatch[1];
+      const taskId = parseTaskPathSegment(patchTaskMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const existing = await tx.task.findUnique({
         where: { id: taskId },
@@ -547,7 +558,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const commentsMatch = pathname.match(/^\/tasks\/([^/]+)\/comments$/i);
     if (method === "GET" && commentsMatch) {
-      const taskId = commentsMatch[1];
+      const taskId = parseTaskPathSegment(commentsMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
@@ -568,7 +579,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
     if (method === "POST" && commentsMatch) {
-      const taskId = commentsMatch[1];
+      const taskId = parseTaskPathSegment(commentsMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
@@ -588,7 +599,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const activityMatch = pathname.match(/^\/tasks\/([^/]+)\/activity$/i);
     if (method === "GET" && activityMatch) {
-      const taskId = activityMatch[1];
+      const taskId = parseTaskPathSegment(activityMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
@@ -621,7 +632,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const taskLabelsMatch = pathname.match(/^\/tasks\/([^/]+)\/labels$/i);
     if (method === "POST" && taskLabelsMatch) {
-      const taskId = taskLabelsMatch[1];
+      const taskId = parseTaskPathSegment(taskLabelsMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const task = await tx.task.findUnique({ where: { id: taskId }, include: { column: true } });
       if (!task || !(await canAccessBoard(userId, task.column.boardId))) return sendError(res, 404, "not found");
@@ -637,7 +648,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const taskLabelDeleteMatch = pathname.match(/^\/tasks\/([^/]+)\/labels\/([0-9a-f-]+)$/i);
     if (method === "DELETE" && taskLabelDeleteMatch) {
-      const taskId = taskLabelDeleteMatch[1];
+      const taskId = parseTaskPathSegment(taskLabelDeleteMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const labelId = taskLabelDeleteMatch[2];
       await tx.taskLabel.deleteMany({ where: { taskId, labelId } });
@@ -646,13 +657,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const taskAssigneesMatch = pathname.match(/^\/tasks\/([^/]+)\/assignees$/i);
     if (method === "GET" && taskAssigneesMatch) {
-      const taskId = taskAssigneesMatch[1];
+      const taskId = parseTaskPathSegment(taskAssigneesMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const assignees = await tx.taskAssignee.findMany({ where: { taskId }, orderBy: { createdAt: "asc" } });
       return sendJson(res, 200, assignees.map((a) => a.userId));
     }
     if (method === "POST" && taskAssigneesMatch) {
-      const taskId = taskAssigneesMatch[1];
+      const taskId = parseTaskPathSegment(taskAssigneesMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const body = await readBody<{ userId?: string }>(req.body);
       if (!body.userId || !isUuidLike(body.userId)) return sendError(res, 400, "invalid userId");
@@ -666,7 +677,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const taskAssigneeDeleteMatch = pathname.match(/^\/tasks\/([^/]+)\/assignees\/([0-9a-f-]+)$/i);
     if (method === "DELETE" && taskAssigneeDeleteMatch) {
-      const taskId = taskAssigneeDeleteMatch[1];
+      const taskId = parseTaskPathSegment(taskAssigneeDeleteMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const assigneeId = taskAssigneeDeleteMatch[2];
       await tx.taskAssignee.deleteMany({ where: { taskId, userId: assigneeId } });
@@ -675,7 +686,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const taskTeamMemberMatch = pathname.match(/^\/tasks\/([^/]+)\/team-members$/i);
     if (method === "POST" && taskTeamMemberMatch) {
-      const taskId = taskTeamMemberMatch[1];
+      const taskId = parseTaskPathSegment(taskTeamMemberMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const body = await readBody<{ memberId?: string }>(req.body);
       if (!body.memberId || !isUuidLike(body.memberId)) return sendError(res, 400, "invalid memberId");
@@ -692,7 +703,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const taskTeamMemberDeleteMatch = pathname.match(/^\/tasks\/([^/]+)\/team-members\/([0-9a-f-]+)$/i);
     if (method === "DELETE" && taskTeamMemberDeleteMatch) {
-      const taskId = taskTeamMemberDeleteMatch[1];
+      const taskId = parseTaskPathSegment(taskTeamMemberDeleteMatch[1]);
       if (persistedTaskIdError(res, taskId)) return;
       const memberId = taskTeamMemberDeleteMatch[2];
       await tx.taskTeamAssignee.deleteMany({ where: { taskId, teamMemberId: memberId } });

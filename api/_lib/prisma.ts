@@ -12,6 +12,10 @@ declare global {
   var __nextplayPrisma: any | undefined;
 }
 
+/**
+ * One PrismaClient per serverless runtime (globalThis) so Vercel invocations reuse a single pool
+ * instead of opening new connections on every request (avoids exhausting Supabase connection limits).
+ */
 export const prisma =
   globalThis.__nextplayPrisma ??
   new PrismaClient({
