@@ -16,12 +16,15 @@
 
 [`vercel.json`](vercel.json) already defines:
 
+- **Framework preset:** `"framework": null` (**Other**). The Vite preset can deploy the SPA from `outputDirectory` but **omit** repo-root [`api/`](api/) serverless routes on some deployments, which surfaces as platform **`404 NOT_FOUND`** (`text/plain`, `x-vercel-error: NOT_FOUND`) for every `/api/*` URL. Using **Other** keeps your explicit `buildCommand` / `outputDirectory` and still picks up `api/**/*.ts`.
 - **Install:** `pnpm install --frozen-lockfile`
 - **Build:** `pnpm prisma:generate && pnpm --filter @nextplay/shared build && pnpm --filter @nextplay/web build`
 - **Output:** `apps/web/dist`
 - **SPA routing:** [`vercel.json`](vercel.json) uses `rewrites` so only non-`/api` paths fall back to `index.html`. If `/api/*` were sent to the SPA, the app would show “Could not load boards” because the client would receive HTML instead of JSON.
 
-In the Vercel UI, confirm **Framework Preset** is **Vite** (or “Other” with the above commands if you override). If the dashboard shows different commands, prefer what is in `vercel.json` after import.
+In the Vercel UI, **Framework Preset** may show **Other** once `vercel.json` is applied. If the dashboard shows different commands, prefer what is in `vercel.json` after import.
+
+**Sanity check after deploy:** open `https://<deployment>/api/ping`. You should see `{"ok":true}` (JSON). If you still get `NOT_FOUND`, the `api/` folder is not part of the deployment (e.g. wrong **Root Directory** — must be repo root, not `apps/web`).
 
 ### If you can’t set `pnpm install --frozen-lockfile` in the dashboard
 
@@ -68,11 +71,13 @@ Enable the same keys for **Preview** as for **Production** if you use preview UR
 
 ## 7. Troubleshooting: board loads but `/api/boards/…` returns 404
 
-1. **Root Directory** must be the **repository root** (empty / `.`), **not** `apps/web`. If the root is `apps/web`, Vercel never sees the repo-root [`api/`](api/) folder, so **no serverless functions** are deployed and every `/api/*` request 404s. Fix: **Settings → General → Root Directory** → clear it, redeploy. In **Deployments → [deployment] → Functions**, you should see handlers such as `[...path]` and `boards`.
+1. **Platform vs app 404:** If the response is **`text/plain`** with **`x-vercel-error: NOT_FOUND`**, Vercel did not run your function at all (wrong deploy layout / preset). If the response is **`application/json`** with `{"error":"not found"}`, the handler ran but denied or missed the board.
 
-2. **Request URL in the browser:** Open DevTools → **Network** → click a failed row → **Headers** → **Request URL**. It must be `https://<your-host>/api/boards/<uuid>/…`. If it is `https://<your-host>/boards/…` (missing `/api`), fix **`VITE_API_URL`** in Vercel (include `/api`, or remove the variable to use same-origin `/api`) and **redeploy** so the SPA rebuilds. The app also self-corrects same-origin “origin only” env at runtime when possible.
+2. **`GET /api/ping`:** Should return `{"ok":true}`. If that is also `NOT_FOUND`, fix **Root Directory** (must be repo root, not `apps/web`) and confirm [`vercel.json`](vercel.json) uses `"framework": null` so `api/` is included. In **Deployments → [deployment] → Functions**, you should see entries like `api/ping`, `api/[...path]`, `api/boards`.
 
-3. **JSON body `{ "error": "not found" }`:** The route exists but the board is missing in the DB tied to `DATABASE_URL`, or your user is not owner/member of that board (same response as “no access”).
+3. **Request URL in the browser:** Open DevTools → **Network** → **Request URL** must be `https://<your-host>/api/boards/<uuid>/…`. If it is `https://<your-host>/boards/…` (missing `/api`), fix **`VITE_API_URL`** (include `/api`, or leave unset) and redeploy.
+
+4. **JSON `{"error":"not found"}` from the API:** Board missing in the DB for `DATABASE_URL`, or your user is not owner/member of that board.
 
 ## Architecture (what gets deployed)
 
