@@ -18,6 +18,4 @@ export const prisma =
     log: ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__nextplayPrisma = prisma;
-}
+globalThis.__nextplayPrisma = prisma;

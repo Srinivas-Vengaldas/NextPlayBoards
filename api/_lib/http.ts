@@ -46,7 +46,7 @@ export function sendJson(res: VercelResponse, status: number, payload: unknown) 
 }
 
 export function sendError(res: VercelResponse, status: number, message: string) {
-  sendJson(res, status, { error: message });
+  sendJson(res, status, { message, error: message });
 }
 
 export async function readBody<T>(reqBody: unknown): Promise<T> {
