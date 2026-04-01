@@ -94,3 +94,21 @@ flowchart LR
 ```
 
 This guide matches the current repo configuration; no extra config files are required beyond [`vercel.json`](vercel.json) and your Vercel project settings.
+
+## Misleading “monorepo” snippets (avoid)
+
+Some posts suggest putting API code under `apps/web/api` and using `vercel.json` like:
+
+```json
+"rewrites": [{ "source": "/api/(.*)", "destination": "/apps/web/api/$1" }]
+```
+
+**That does not apply here and is not valid Vercel routing in general:**
+
+1. **`destination` is a URL path**, not a filesystem folder. There is no deployed route at `/apps/web/api/...` unless you have explicitly built the [Build Output API](https://vercel.com/docs/build-output-api/v3) layout yourself. A rewrite cannot “point at” a TypeScript file on disk.
+
+2. **In this repo, serverless handlers live in the repository-root [`api/`](api/) directory** (sibling of `apps/web`), not under `apps/web/api`. Prisma and dependencies are wired from the **monorepo root**; moving handlers into `apps/web` only helps if **Project → Root Directory** is set to `apps/web`—but then you must also fix install/build so pnpm workspaces and `prisma generate` still run from the repo root (or duplicate tooling). The supported setup here is **Root Directory = repo root** + root **`api/`**.
+
+3. **Dynamic segments like `/api/boards/:id` do not require a separate `[id].ts` per route.** [`api/[...path].ts`](api/[...path].ts) is a **catch-all** that handles `/api/boards`, `/api/boards/<uuid>`, `/api/boards/<uuid>/labels`, etc. (see [`api/_lib/resolveApiPathname.ts`](api/_lib/resolveApiPathname.ts) for path resolution).
+
+If you still see **`x-vercel-error: NOT_FOUND`** with **`text/plain`**, Vercel is not attaching any function to that URL (wrong **Root Directory**, or static output-only deploy). Use **`GET /api/ping`** and the deployment **Functions** list to confirm functions are present; do not use rewrites to invented `/apps/web/api/...` paths.

@@ -4,6 +4,11 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm prisma:generate && pnpm --filter @nextplay/shared build && pnpm --filter @nextplay/web build",
   "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",
