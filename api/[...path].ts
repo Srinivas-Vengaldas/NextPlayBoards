@@ -141,24 +141,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const boardId = boardMatch[1];
       if (!(await canAccessBoard(userId, boardId))) return sendError(res, 404, "not found");
 
-      const board = await tx.board.findUnique({
-        where: { id: boardId },
-        include: {
-          columns: {
-            orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-            include: {
-              tasks: {
-                orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-                include: {
-                  labels: { include: { label: true } },
-                  assignees: true,
-                  teamAssignees: { include: { teamMember: true } },
+      let board: any = null;
+      try {
+        // NOTE: RLS context is set in `runWithRls()` before this runs.
+        board = await tx.board.findUnique({
+          where: { id: boardId },
+          include: {
+            columns: {
+              orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+              include: {
+                tasks: {
+                  orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+                  include: {
+                    labels: { include: { label: true } },
+                    assignees: true,
+                    teamAssignees: { include: { teamMember: true } },
+                  },
                 },
               },
             },
           },
-        },
-      });
+        });
+      } catch (err) {
+        console.error("board_fetch_error", {
+          boardId,
+          userId,
+          pathname,
+          method,
+          error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
+        });
+        return sendError(res, 500, "database error");
+      }
       if (!board) return sendError(res, 404, "not found");
 
       return sendJson(res, 200, {
