@@ -422,7 +422,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (method === "POST" && columnTasksMatch) {
       const columnId = columnTasksMatch[1];
       const column = await tx.column.findUnique({ where: { id: columnId } });
-      if (!column || !(await canAccessBoard(userId, column.boardId))) return sendError(res, 404, "not found");
+      if (!column) {
+        console.warn("column_not_found", { columnId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
+      if (!(await canAccessBoard(userId, column.boardId))) {
+        console.warn("column_access_denied_or_missing_board", { columnId, boardId: column.boardId, userId, pathname, method });
+        return sendError(res, 404, "not found");
+      }
       const body = await readBody<{
         title?: string;
         description?: string;
