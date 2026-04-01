@@ -612,7 +612,7 @@ export default function KanbanBoard({
   });
 
   const taskCreate = useMutation({
-    mutationFn: ({ columnId, title, optimisticId }: { columnId: string; title: string; optimisticId: string }) =>
+    mutationFn: ({ columnId, title, optimisticId: _optimisticId }: { columnId: string; title: string; optimisticId: string }) =>
       api.createTask(columnId, { title, priority: "none", description: "" }),
     onSuccess: (created, variables) => {
       setColumnsState((prev) =>
