@@ -23,9 +23,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const bearer = hasBearer ? auth.slice("Bearer ".length).trim() : "";
   const tokenAlg = bearer ? peekJwtAlg(bearer) : undefined;
 
-  const secretNormalized = Boolean(normalizeSupabaseJwtSecret(process.env.SUPABASE_JWT_SECRET));
+  const jwtSecretNormalized = Boolean(normalizeSupabaseJwtSecret(process.env.SUPABASE_JWT_SECRET));
   let canResolveUser = false;
-  if (hasBearer && secretNormalized) {
+  if (hasBearer) {
     canResolveUser = (await getUserIdFromRequest(req)) !== null;
   }
 
@@ -38,8 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     hasAuthHeader: hasBearer,
     auth: {
       tokenAlg: tokenAlg ?? null,
-      secretNormalizedOk: secretNormalized,
-      /** If false with HS256 token, JWT secret in Vercel does not match Supabase or token expired. */
+      /** Used only for HS256 tokens. RS256/ES256 use JWKS from the token `iss` claim. */
+      jwtSecretNormalizedOk: jwtSecretNormalized,
       canResolveUser,
     },
     env: {

@@ -1,9 +1,11 @@
 import type { VercelRequest } from "@vercel/node";
 import jwt from "jsonwebtoken";
+import jwksRsa from "jwks-rsa";
 
 /**
  * Vercel / pasted env vars often include wrapping quotes or trailing newlines.
- * Supabase dashboard → Settings → API → JWT Secret (not the anon/service role keys).
+ * For HS256 tokens: Supabase → Settings → API → JWT Secret (not anon/service keys).
+ * For RS256/ES256: Supabase signs with a keypair; verify via JWKS (no symmetric secret).
  */
 export function normalizeSupabaseJwtSecret(raw: string | undefined): string | null {
   if (raw == null || raw === "") return null;
@@ -14,22 +16,24 @@ export function normalizeSupabaseJwtSecret(raw: string | undefined): string | nu
   return s.length > 0 ? s : null;
 }
 
-const verifyOpts: jwt.VerifyOptions = {
+const clockToleranceSec = 300;
+
+const hs256Opts: jwt.VerifyOptions = {
   algorithms: ["HS256"],
-  clockTolerance: 300,
+  clockTolerance: clockToleranceSec,
 };
 
 /**
- * Try UTF-8 secret (typical), then HMAC key decoded from base64 (some setups store key as base64).
+ * Symmetric Supabase access tokens (legacy / some projects).
  */
-function verifySupabaseAccessToken(token: string, secretUtf8: string): jwt.JwtPayload {
+function verifySupabaseAccessTokenHs256(token: string, secretUtf8: string): jwt.JwtPayload {
   try {
-    return jwt.verify(token, secretUtf8, verifyOpts) as jwt.JwtPayload;
+    return jwt.verify(token, secretUtf8, hs256Opts) as jwt.JwtPayload;
   } catch (e1) {
     try {
       const key = Buffer.from(secretUtf8, "base64");
       if (key.length === 0) throw e1;
-      return jwt.verify(token, key, verifyOpts) as jwt.JwtPayload;
+      return jwt.verify(token, key, hs256Opts) as jwt.JwtPayload;
     } catch {
       throw e1;
     }
@@ -37,8 +41,35 @@ function verifySupabaseAccessToken(token: string, secretUtf8: string): jwt.JwtPa
 }
 
 /**
- * Supabase session `access_token` is HS256 with the project JWT secret.
- * Uses `jsonwebtoken` (CJS-friendly on Vercel); never import ESM-only `jose` here.
+ * Asymmetric tokens (e.g. ES256) — JWKS at `{iss}/.well-known/jwks.json`.
+ */
+async function verifySupabaseJwtWithJwks(token: string, alg: "RS256" | "ES256", kid: string, iss: string): Promise<jwt.JwtPayload> {
+  const jwksUri = `${iss.replace(/\/$/, "")}/.well-known/jwks.json`;
+  const client = jwksRsa({
+    jwksUri,
+    cache: true,
+    cacheMaxAge: 600_000,
+    rateLimit: true,
+    jwksRequestsPerMinute: 30,
+  });
+  const signingKey = await client.getSigningKey(kid);
+  const pubKey = signingKey.getPublicKey();
+  return jwt.verify(token, pubKey, {
+    algorithms: [alg],
+    clockTolerance: clockToleranceSec,
+  }) as jwt.JwtPayload;
+}
+
+/** Read JWT header `alg` (Supabase may use HS256, RS256, or ES256). */
+function getJwtAlgorithm(token: string): string | null {
+  const complete = jwt.decode(token, { complete: true });
+  const alg = complete?.header?.alg;
+  return typeof alg === "string" ? alg : null;
+}
+
+/**
+ * Verifies Supabase-issued access_token and returns `sub` (user id).
+ * Uses `jsonwebtoken` + `jwks-rsa` (CJS-friendly on Vercel).
  */
 export async function getUserIdFromRequest(req: VercelRequest): Promise<string | null> {
   const auth = req.headers.authorization;
@@ -66,16 +97,44 @@ export async function getUserIdFromRequest(req: VercelRequest): Promise<string |
     return null;
   }
 
-  if (!secret) {
-    console.warn("[auth] 401", {
-      reason: "supabase_jwt_secret_missing_after_normalize",
-      hadRawEnv: Boolean(rawSecretEnv?.trim()),
-    });
+  const headerAlg = getJwtAlgorithm(token);
+  if (!headerAlg) {
+    console.warn("[auth] 401", { reason: "jwt_decode_or_missing_alg" });
     return null;
   }
 
+  const algNorm = headerAlg.toUpperCase();
+
   try {
-    const payload = verifySupabaseAccessToken(token, secret);
+    let payload: jwt.JwtPayload;
+
+    if (algNorm === "HS256") {
+      if (!secret) {
+        console.warn("[auth] 401", {
+          reason: "hs256_requires_supabase_jwt_secret",
+          hadRawEnv: Boolean(rawSecretEnv?.trim()),
+        });
+        return null;
+      }
+      payload = verifySupabaseAccessTokenHs256(token, secret);
+    } else if (algNorm === "RS256" || algNorm === "ES256") {
+      const complete = jwt.decode(token, { complete: true });
+      const kid = complete?.header?.kid;
+      const iss = (complete?.payload as jwt.JwtPayload | undefined)?.iss;
+      if (typeof kid !== "string" || !kid) {
+        console.warn("[auth] 401", { reason: "asymmetric_jwt_missing_kid", alg: algNorm });
+        return null;
+      }
+      if (typeof iss !== "string" || !iss.startsWith("https://")) {
+        console.warn("[auth] 401", { reason: "asymmetric_jwt_missing_iss", alg: algNorm });
+        return null;
+      }
+      payload = await verifySupabaseJwtWithJwks(token, algNorm, kid, iss);
+    } else {
+      console.warn("[auth] 401", { reason: "unsupported_jwt_alg", alg: headerAlg });
+      return null;
+    }
+
     const sub = payload.sub;
     if (!sub || typeof sub !== "string") {
       console.warn("[auth] 401", { reason: "jwt_missing_sub", hasPayload: Boolean(payload) });
@@ -89,7 +148,8 @@ export async function getUserIdFromRequest(req: VercelRequest): Promise<string |
       errorName: err.name,
       errorMessage: err.message,
       tokenLength: token.length,
-      secretLength: secret.length,
+      jwtAlg: headerAlg,
+      secretLength: secret?.length ?? 0,
     });
     return null;
   }
